@@ -1,0 +1,10 @@
+[project]
+name = "a2a-dygrade-rl"
+version = "0.1.0"
+description = "A2A-DyGrade-RL offline research experiment pipeline"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+

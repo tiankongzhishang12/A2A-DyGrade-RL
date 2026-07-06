@@ -1,0 +1,97 @@
+# =========================
+# Python / runtime caches
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+htmlcov/
+
+# =========================
+# Python packaging / build artifacts
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Secrets / credentials
+# =========================
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.crt
+secrets/
+credentials/
+
+# =========================
+# Data: keep directory only
+# =========================
+data/raw/*
+data/processed/*
+data/trajectories/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/trajectories/.gitkeep
+
+# =========================
+# Experiment outputs: keep directory only
+# =========================
+outputs/runs/*
+!outputs/runs/.gitkeep
+
+# =========================
+# Model / checkpoint artifacts
+# =========================
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
+*.pkl
+*.joblib
+
+# =========================
+# Logs / temporary files
+# =========================
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# =========================
+# OS / editor files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# =========================
+# Spec-kit local state installed for this machine.
+# Project feature specs live in specs/ and may be tracked separately.
+# =========================
+.agents/skills/speckit-*/
+.specify/extensions/
+.specify/feature.json
