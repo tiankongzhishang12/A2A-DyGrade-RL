@@ -1,0 +1,50 @@
+run:
+  seed: 42
+  rule_version: v1
+
+datasets:
+  - name: dress
+    enabled: true
+    raw_path: data/raw/dress
+    pattern: "DREsS_*.tsv"
+    question_type: essay
+    score_min: 0
+    score_max: 15
+  - name: asap_sas
+    enabled: true
+    raw_path: data/raw/asap_sas
+    pattern: "*.tsv"
+    question_type: short_answer
+    score_min: 0
+    score_max: 3
+  - name: sas_bench
+    enabled: true
+    raw_path: data/raw/sas_bench/datasets_en
+    pattern: "*.translated.jsonl"
+    question_type: short_answer
+    score_min: 0
+    score_max: 5
+
+splits:
+  mode: dataset_aware_prompt
+  train: 0.7
+  dev: 0.1
+  test: 0.2
+
+paper:
+  min_items: 5
+  max_items: 8
+  target_items: 5
+  mix_mode: strict
+  strict_quotas:
+    - asap_sas: 2
+      sas_bench: 2
+      dress: 1
+    - asap_sas: 3
+      sas_bench: 1
+      dress: 1
+  budgets:
+    max_cost: 0.20
+    max_latency: 30.0
+    max_agent_calls: 12
+    max_a2a_messages: 6

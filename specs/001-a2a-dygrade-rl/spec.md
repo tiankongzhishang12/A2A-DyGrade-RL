@@ -125,4 +125,4 @@
 - Agent 输出可以来自实时模型调用，也可以在 smoke test 中来自确定性 fixtures，但二者必须使用相同 cache schema。
 - 主实验默认使用 prompt-level 和 paper-level split。
 - 第一里程碑优先保证可复现实验产物，而不是实时用户交互。
-- 当前项目 constitution 仍为占位模板，除本规格外不施加额外约束。
+- 项目最高规则以仓库根目录 `AGENTS.md` 为准，`.specify/memory/constitution.md` 仅作为 spec-kit 入口指针；本规格必须遵守 `AGENTS.md` 中关于简体中文、离线论文实验、可复现性、数据划分、防泄漏、公平评价、运行产物和目录职责的约束。

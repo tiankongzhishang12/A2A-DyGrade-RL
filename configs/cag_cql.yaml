@@ -1,0 +1,7 @@
+training:
+  seed: 42
+  batch_size: 32
+  epochs: 5
+  learning_rate: 0.0003
+  discount: 0.99
+  cql_alpha: 1.0

@@ -79,6 +79,10 @@ outputs/runs/*
 *.swp
 *.swo
 
+# Local collaboration/session logs
+docs/logs/*
+!docs/logs/.gitkeep
+
 # =========================
 # OS / editor files
 # =========================
@@ -95,3 +99,6 @@ desktop.ini
 .agents/skills/speckit-*/
 .specify/extensions/
 .specify/feature.json
+
+# Generated spec-kit verification reports
+specs/**/verify-tasks-report.md

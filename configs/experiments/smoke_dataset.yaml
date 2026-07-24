@@ -1,0 +1,27 @@
+run:
+  seed: 7
+  rule_version: smoke-v1
+
+datasets:
+  - name: dress
+    enabled: true
+    raw_path: tests/fixtures/raw_smoke
+    pattern: "*.jsonl"
+    question_type: short_answer
+    score_min: 0
+    score_max: 5
+
+splits:
+  train: 0.5
+  dev: 0.25
+  test: 0.25
+
+paper:
+  min_items: 1
+  max_items: 5
+  target_items: 2
+  budgets:
+    max_cost: 1.0
+    max_latency: 10.0
+    max_agent_calls: 4
+    max_a2a_messages: 2

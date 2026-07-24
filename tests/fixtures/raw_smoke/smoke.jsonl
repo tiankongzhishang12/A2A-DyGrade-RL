@@ -1,0 +1,10 @@
+{"item_id":"1","prompt":"解释水循环。","answer":"水蒸发后形成云，然后降雨回到地面。","reference_answer":"水通过蒸发、凝结、降水和径流循环。","score":4,"score_min":0,"score_max":5,"prompt_id":"science_1"}
+{"item_id":"2","prompt":"解释水循环。","answer":"水会变成雨。","reference_answer":"水通过蒸发、凝结、降水和径流循环。","score":2,"score_min":0,"score_max":5,"prompt_id":"science_1"}
+{"item_id":"3","prompt":"什么是光合作用？","answer":"植物利用阳光、水和二氧化碳制造养分。","reference_answer":"植物通过叶绿体利用光能合成有机物并释放氧气。","score":5,"score_min":0,"score_max":5,"prompt_id":"science_2"}
+{"item_id":"4","prompt":"什么是光合作用？","answer":"植物吃阳光。","reference_answer":"植物通过叶绿体利用光能合成有机物并释放氧气。","score":1,"score_min":0,"score_max":5,"prompt_id":"science_2"}
+{"item_id":"5","prompt":"描述力和运动的关系。","answer":"力可以改变物体速度或方向。","reference_answer":"力会造成加速度，改变运动状态。","score":4,"score_min":0,"score_max":5,"prompt_id":"physics_1"}
+{"item_id":"6","prompt":"描述力和运动的关系。","answer":"运动就是跑得快。","reference_answer":"力会造成加速度，改变运动状态。","score":1,"score_min":0,"score_max":5,"prompt_id":"physics_1"}
+{"item_id":"7","prompt":"说明生态系统中的生产者。","answer":"生产者通常是植物，能把太阳能转为化学能。","reference_answer":"生产者通过光合作用制造有机物，是食物网基础。","score":5,"score_min":0,"score_max":5,"prompt_id":"bio_1"}
+{"item_id":"8","prompt":"说明生态系统中的生产者。","answer":"生产者是制造东西的人。","reference_answer":"生产者通过光合作用制造有机物，是食物网基础。","score":1,"score_min":0,"score_max":5,"prompt_id":"bio_1"}
+{"item_id":"9","prompt":"解释分数等值。","answer":"二分之一和四分之二表示同样大小。","reference_answer":"分子分母按相同倍数变化时分数值不变。","score":5,"score_min":0,"score_max":5,"prompt_id":"math_1"}
+{"item_id":"10","prompt":"解释分数等值。","answer":"分数越大越好。","reference_answer":"分子分母按相同倍数变化时分数值不变。","score":0,"score_min":0,"score_max":5,"prompt_id":"math_1"}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Speckit Workflow"
+  short_description: "Route project tasks through the speckit workflow under AGENTS.md."
+  default_prompt: "Use $project-speckit-workflow to route this project task through the right speckit workflow."

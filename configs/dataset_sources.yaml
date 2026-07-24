@@ -1,0 +1,29 @@
+sources:
+  - name: dress
+    status: local_archive
+    target_dir: data/raw/dress
+    urls: []
+    expected_files:
+      - "DREsS_Std.tsv"
+      - "DREsS_New.tsv"
+      - "DREsS_CASE_content.tsv"
+      - "DREsS_CASE_language.tsv"
+      - "DREsS_CASE_organization.tsv"
+    note: "用户提供 D:/Backup/Downloads/DREsS.rar，已解压到 data/raw/dress。主实验读取 DREsS_Std.tsv 和过滤后的 DREsS_New.tsv。"
+  - name: asap_sas
+    status: manual_authorized_download
+    target_dir: data/raw/asap_sas
+    urls: []
+    expected_files:
+      - "*.tsv"
+      - "*.csv"
+    note: "ASAP-SAS 通常需要 Kaggle 账号和竞赛规则授权；请授权下载后放入 target_dir。"
+  - name: sas_bench
+    status: huggingface_dataset
+    target_dir: data/raw/sas_bench
+    urls:
+      - hf://datasets/aleversn/SAS-Bench
+    expected_files:
+      - "datasets/*.jsonl"
+      - "datasets_en/*.translated.jsonl"
+    note: "使用 hf download aleversn/SAS-Bench --repo-type dataset --local-dir data/raw/sas_bench 下载。"
