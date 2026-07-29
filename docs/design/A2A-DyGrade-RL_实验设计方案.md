@@ -1,1882 +1,1593 @@
-# A2A-DyGrade-RL 实验设计方案
+# 面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验设计方案
 
-## 0. 研究方向定位
-
-本文拟研究一种面向自动阅卷的通信感知多智能体动态路由方法，暂命名为 **A2A-DyGrade-RL**。本项目**不训练、不微调任何评分模型**，也不以提升单个评分器的 QWK 为研究任务，而是关注在一份已经切分好的试卷中，如何根据题目难度、题型、学生答案长度、Rubric 或标准答案、Agent 能力、剩余预算、通信历史和当前评分风险，动态决定每道题应由哪个 Agent 批改，是否需要证据验证、A2A 第二意见、仲裁或停止。
-
-所有 `Cheap/Mid/Strong/Evidence/Arbitrator` Agent 均由现成 API/开源指令模型配合固定 Prompt 实例化，或直接复用公开数据中的既有模型输出。Agent cache 生成后，模型参数、Prompt 版本、temperature 和输出全部冻结；所有 baseline、消融和 A2A-DyGrade-RL 共享同一 cache。项目允许训练的对象只有 Router/CAG-CQL，以及为 Router 提供状态的 Agent 条件能力画像和风险校准组件，不能反向更新评分 Agent。
-
-与第一版综述中的 RBAR 方向相比，本方案保留 Rubric 约束、证据验证、动作选择和预算控制等思想，但论文主线从“边界样本证据决策”转向“试卷级多智能体动态路由与并行阅卷效率优化”。第一版综述已经指出，Rubric 约束自动评分不应仅被看作一次性分数预测，而应被建模为围绕评分项、证据状态和风险展开的动态决策过程；本方案进一步将该思想扩展到试卷级多 Agent 动态路由场景。fileciteturn0file0
-
-本文的核心问题是：
-
-> 在公开自动评分数据集上，能否通过离线强化学习 Router 学会在不同题目、不同 Agent、不同预算和不同通信状态之间进行动态决策，从而在保证评分质量的同时降低平均阅卷成本和试卷级完成时间？
+> 方法名称：**A2A-DyGrade-RL**
+> 英文题目：**Quality-Constrained Multi-Agent Dynamic Routing for Simulated Paper-Level Automated Scoring**
+> 版本：2.2（同步 V1.4 职责与内部拆分正式稿）
+> 修订日期：2026-07-29
+> 状态：V1.4 正式设计稿（等待实现）
+> 最高规则：`AGENTS.md`
 
 ---
 
-## 1. 实验总体目标
+## 0. 本次修订的硬性原则
 
-### 1.1 任务定义
+本方案统一执行以下六项正式决定：
 
-给定一份已经切分好的试卷：
+1. 论文方向正式确定为：**面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法研究**。
+2. 评分准确性和严重错分风险是最高优先级；必须先通过零容忍质量非劣效门，资源下降不得补偿质量失败。
+3. 主方法的下一 Item、升级、核验、二评和仲裁由 Router 学习；只对 STOP 安全概率边界进行独立自动校准，禁止研究者根据结果手工调边界。
+4. 正式质量协议固定为 Gate Error、Severe/Extreme Error、Unsafe Stop、Macro-NMAE、固定11档 Macro-QWK 和 Paper 级配对 Cluster Bootstrap。
+5. `train_fit` 只训练参数，`train_calibration` 只校准每个冻结 checkpoint 的 STOP 安全边界并组装 Package，Dev 才在完整 Package 之间选择唯一 Router；三者职责不得混用。
+6. 不直接拆现有 train Paper；必须先把原 train 主路由 Item 按不可拆分题目组划入 `train_fit/train_calibration`，再分别重建固定5题 strict Paper。
+
+统一实验流程：
+
+```text
+外部train主路由Item
+→ 按prompt/exact-answer/leakage传递连通分量确定性拆分
+→ 分别重建train_fit/train_calibration strict Paper
+→ train_fit：学习Router和风险模型参数
+→ train_calibration：只校准STOP安全边界并冻结参考/预算/Package
+→ dev：只比较完整固定Package，执行质量门后资源优先选择唯一checkpoint
+→ freeze：锁定模型、Prompt、指标协议、边界、预算、质量门和checkpoint
+→ test：一次性最终评价；质量门不通过即如实保留失败
+```
+
+统一选择原则：
+
+> **先证明评分质量相对参考策略不劣，再在质量可行策略中最小化 Cost、Elapsed Time、Agent Calls 和 A2A Exchanges。**
+
+## 1. 研究方向定位
+
+本文不训练、不微调评分 Agent，不以提升某个评分模型的 QWK 为贡献，也不研究系统能够批改什么题。Cheap/Mid/Strong/Evidence/Arbitrator 的评分能力由冻结模型、Prompt 和输入上下文决定；Router 的研究任务是在这些评分能力已经存在的条件下，对多道待评分作答进行质量约束的序列调度。
+
+本文的研究对象是一份**模拟试卷级评分 episode**。Router 每一步需要联合决定：
+
+- 下一步处理哪道作答；
+- 调用哪个评分 Agent；
+- 是否进行 Rubric 证据核验；
+- 是否请求独立第二意见；
+- 是否进行仲裁；
+- 是否能够安全停止；
+- 如何在多道作答之间分配剩余资源。
+
+核心问题是：
+
+> 在未调用 Agent 输出不可见、评分信息逐步产生、多道任务共享成本与调用资源的条件下，质量约束的离线强化学习 Router 能否在评分质量和严重错分风险不劣于自动参考策略的前提下，减少达到可靠评分所需的资源？
+
+核心表述为：
+
+> **我们固定的是评分 Agent，不固定的是评分过程。**
+
+---
+
+## 2. 研究范围与非目标
+
+### 2.1 本文研究
+
+- 模拟试卷中的多题共享预算；
+- 多 Agent 可变长度评分路径；
+- 逐步评分、证据、分歧和通信状态；
+- Router 对下一任务和下一操作的联合选择；
+- 自动质量参考、自动风险校准和自动 checkpoint 选择；
+- 质量可行条件下的资源优化；
+- 强分类器、Bandit、greedy、knapsack 与 RL 的公平比较。
+
+### 2.2 本文不研究
+
+- 评分 Agent 训练或微调；
+- 专用评分模型构建；
+- 任意题目、任意考试的通用评分；
+- Agent 评分覆盖范围扩展；
+- `student_id`、`exam_id`、学生能力或整卷总分建模；
+- 真实学生原始试卷恢复；
+- 生产级在线阅卷平台；
+- 第一版真实并发 makespan；
+- 未正式建模的人工复核收益。
+
+---
+
+## 3. 模拟试卷与数据定义
+
+### 3.1 单道评分任务
+
+每道作答表示为：
 
 \[
-P=\{q_1,q_2,\ldots,q_n\}
-\]
-
-其中每道题 \(q_i\) 包含：
-
-\[
-q_i = (prompt_i, answer_i, rubric_i, reference_i, type_i)
-\]
-
-系统拥有一个异构 Agent 池：
-
-\[
-\mathcal{A}=\{CheapAgent, MidAgent, StrongAgent, EvidenceAgent, ArbitratorAgent\}
-\]
-
-系统需要在预算约束下完成整张试卷评分：
-
-\[
-B = [B_{cost}, B_{latency}, B_{calls}, B_{messages}]
+x_i=(prompt_i,answer_i,rubric_i,reference_i,scale_i,type_i)
 \]
 
 其中：
 
-- \(B_{cost}\)：模型调用成本预算；
-- \(B_{latency}\)：试卷级最大完成时间；
-- \(B_{calls}\)：最大 Agent 调用次数；
-- \(B_{messages}\)：最大 A2A 通信次数。
+- `prompt`：题目；
+- `answer`：学生作答；
+- `rubric`：评分标准；
+- `reference`：参考答案或得分点；
+- `scale`：分值范围；
+- `type`：题型、学科和语言等属性。
 
-目标是在保证评分质量的同时，最小化成本、延迟和无效通信。
+Agent 和 Router 均不需要真实 `student_id`。真实系统中的 `exam_id` 可以用于检索 Rubric 和归档成绩，但不作为大模型评分证据。
+
+### 3.2 模拟试卷
+
+一份模拟试卷表示为：
+
+\[
+P=\{x_1,x_2,\ldots,x_n\}
+\]
+
+当前主实验固定：
+
+```text
+n = 5
+2～3条 ASAP-SAS
+1～2条 SAS-Bench
+1条 DREsS
+```
+
+模拟试卷中的：
+
+| 内容 | 性质 |
+|---|---|
+| 原始题目 | 真实数据 |
+| 学生答案 | 真实学生作答 |
+| Rubric/参考答案 | 原数据集信息 |
+| Gold score | 原数据集人工评分 |
+| 多条作答组合关系 | 模拟构造 |
+| 共享资源 | 实验设定 |
+| Agent 调用路径 | Cache replay/模拟环境 |
+
+因此本文使用：
+
+> **基于真实学生作答重组的模拟试卷。**
+
+不声称它是某名真实学生在某场真实考试中的原始试卷。
+
+### 3.3 代码字段
+
+代码中继续保留 `paper_id`，但论文和报告语义为：
+
+```text
+simulated_paper_id
+scoring_episode_id
+```
 
 ---
 
-### 1.2 研究目标
+## 4. 数据集与当前数据状态
 
-本文实验要验证以下问题：
+继续使用：
 
-1. **动态路由是否优于固定模型批改？**
-2. **离线强化学习 Router 是否优于静态难度路由和不确定性升级路由？**
-3. **A2A 通信、Agent 能力图、预算状态、难度状态是否真的有贡献？**
-4. **A2A-DyGrade-RL 是否能形成更优的 Cost-QWK Pareto Frontier？**
-
----
-
-## 2. 数据集构建过程
-
-### 2.1 数据集选择原则
-
-本实验只使用现成公开数据集，不进行额外人工标注。数据集数量最多 3 个，避免实验范围过大、数据清洗成本过高和论文主线发散。
-
-最终选择：
-
-| 数据集 | 类型 | 用途 |
+| 数据集 | 类型 | 作用 |
 |---|---|---|
-| DREsS | Rubric-based 作文评分 | 作文题 / 长答题 |
-| ASAP-SAS | 短答案评分 | 经典短答题 |
-| SAS-Bench | LLM 短答案评分基准 | 多学科短答题 |
+| DREsS | Rubric-based 英语作文 | 长文本、Rubric 和证据风险 |
+| ASAP-SAS | 短答案 | 经典离散评分任务 |
+| SAS-Bench | 多学科简答 | 多学科、分步得分和错误异构性 |
 
-DREsS 是面向 EFL 写作教育的 rubric-based essay scoring 数据集，包含真实课堂作文、专家评分以及基于 Rubric 的评分信息，适合作为作文类主观题评分实验数据。([arxiv.org](https://arxiv.org/abs/2402.16733?utm_source=chatgpt.com)) ASAP-SAS 是短答案自动评分领域常用公开数据集，已有自动短答案评分工作将其作为主要评测数据集。([arxiv.org](https://arxiv.org/abs/2012.11243?utm_source=chatgpt.com)) SAS-Bench 是 2025 年提出的短答案评分基准，包含真实学科考试题、学生回答、专家评分和细粒度评分信息，适合补充多学科短答题场景。([arxiv.org](https://arxiv.org/abs/2505.07247?utm_source=chatgpt.com))
+当前 prepared data：
 
----
+| Split | Item | Paper | Paper引用Item |
+|---|---:|---:|---:|
+| Train | 28,038 | 5,475 | 27,375 |
+| Dev | 3,244 | 196 | 980 |
+| Test | 8,251 | 1,566 | 7,830 |
+| 合计 | 39,533 | 7,237 | 36,185 |
 
-### 2.2 原始数据统一格式
-
-不同数据集字段不同，因此第一步是统一成 item-level 格式。
-
-统一后的 `items.jsonl` 示例：
-
-```json
-{
-  "item_id": "dress_000001",
-  "dataset": "DREsS",
-  "question_type": "essay",
-  "subject": "english",
-  "prompt": "作文题目",
-  "student_answer": "学生作答内容",
-  "reference_answer": null,
-  "rubric": "评分量表",
-  "gold_score": 4,
-  "score_min": 0,
-  "score_max": 6,
-  "metadata": {
-    "prompt_len": 128,
-    "answer_len": 512,
-    "rubric_len": 420,
-    "has_reference_answer": false
-  }
-}
-```
-
-短答案数据统一为：
-
-```json
-{
-  "item_id": "asap_sas_000001",
-  "dataset": "ASAP-SAS",
-  "question_type": "short_answer",
-  "subject": "science",
-  "prompt": "题目文本",
-  "student_answer": "学生作答",
-  "reference_answer": "标准答案",
-  "rubric": "评分规则或评分说明",
-  "gold_score": 2,
-  "score_min": 0,
-  "score_max": 3,
-  "metadata": {
-    "prompt_len": 64,
-    "answer_len": 38,
-    "rubric_len": 120,
-    "has_reference_answer": true
-  }
-}
-```
-
----
-
-### 2.3 分数归一化
-
-由于不同数据集分值范围不同，需要统一计算归一化误差。
-
-对第 \(i\) 道题：
-
-\[
-R_i = score\_max_i - score\_min_i
-\]
-
-\[
-E_i = \frac{|\hat{y}_i-y_i|}{R_i}
-\]
-
-其中：
-
-- \(\hat{y}_i\)：系统预测分数；
-- \(y_i\)：数据集 gold score；
-- \(E_i\)：归一化评分误差。
-
-实验报告仍保留原始分数尺度下的 MAE，同时使用 QWK 作为自动评分主指标。
-
----
-
-### 2.4 自动构造试卷级样本
-
-公开数据集通常是单题或单作文样本，而本文研究的是试卷级多题并行阅卷。因此需要将 item 自动组合成 paper-level 样本。
-
-注意：该过程不涉及人工标注，只是自动重组公开数据。
-
-每张伪试卷包含 5–8 道题，组合规则如下：
+审计状态：
 
 ```text
-每张试卷包含：
-- 2–3 道 ASAP-SAS 短答案题；
-- 1–2 道 SAS-Bench 多学科短答案题；
-- 1 道 DREsS 作文题或长答题。
+Prepared Data Audit = PASS
+Item leakage = 0
+Prompt leakage = 0
+Paper leakage = 0
+Paper reference error = 0
+Strict mix deviation = 0
 ```
 
-`papers.jsonl` 示例：
-
-```json
-{
-  "paper_id": "paper_000001",
-  "items": [
-    "asap_sas_000023",
-    "asap_sas_000105",
-    "sasbench_000081",
-    "sasbench_000304",
-    "dress_000092"
-  ],
-  "paper_budget": {
-    "max_cost": 1.0,
-    "max_latency": 30.0,
-    "max_agent_calls": 10,
-    "max_a2a_messages": 6
-  }
-}
-```
-
-这种 paper-level 构造用于模拟真实试卷中的多题并行评分场景，使实验能够评估：
-
-- 试卷级平均完成时间；
-- 多 Agent 并行调度效率；
-- 不同题目之间的预算竞争；
-- A2A 通信是否值得；
-- 动态路由是否比静态路由更优。
+主 Router、轨迹和主评价只使用 `paper_manifest.csv` 引用的36,185条 Item。未进入 Paper 的 Item 可用于独立 Agent QA，不进入主路由训练和主结果。
 
 ---
 
-### 2.5 数据划分
+## 5. 数据划分、内部 Paper 重建与防泄漏
 
-采用三种划分方式：
+### 5.1 外部划分保持不变
+
+现有 prompt-aware `train/dev/test`、prepared Item 和外部 Paper 继续保持。原始 Dev 只用于完整 Policy Package 的统计质量门与自动选择，原始 Test 只用于冻结后的最终评价。
+
+外部 train 中：
 
 ```text
-Split A：Item-level random split
-Split B：Prompt-level split
-Split C：Paper-level split
+Prepared Item：28,038
+现有train Paper：5,475
+现有train Paper引用Item：27,375
 ```
 
-主实验使用 **Prompt-level split + Paper-level split**。这样可以避免同一题目 prompt 同时出现在训练集和测试集，减少数据泄漏风险。
+内部拆分只使用当前27,375条主路由候选 Item，不把另外663条未入 Paper Item 擅自扩入主实验；后者继续用于独立 Agent QA。
 
-最终数据文件：
+### 5.2 禁止直接切分现有 train Paper
+
+不能将现有 `paper_train_*` 随机或按比例直接分到 `train_fit/train_calibration`。本地审计显示：
 
 ```text
-data/processed/
-├── items_train.jsonl
-├── items_dev.jsonl
-├── items_test.jsonl
-├── papers_train.jsonl
-├── papers_dev.jsonl
-└── papers_test.jsonl
+现有train Paper：5,475
+prompt group：2,903
+按共享prompt group连接后的Paper连通分量：1
+最大连通分量：5,475（100%）
 ```
 
----
+原因是不同 Paper 反复共享大型 prompt group。直接切 Paper 会使同一题目组跨内部 split；若强制 Paper 与 prompt group 同时完整，则5,475份 Paper 无法拆成两个非空独立部分。
 
-## 3. Agent 设计与缓存机制
+因此，现有外部 `papers_train.jsonl` 和 `paper_manifest.csv` 只保留为 prepared data 来源、Item 范围和审计证据，不能直接作为内部训练 episode manifest。
 
-### 3.1 Agent 类型
+### 5.3 先按题目组拆分原 train Item
 
-系统包含 5 类 Agent：
+从当前27,375条 train 主路由 Item 建立不可拆分内部单元。原子关系包括：
 
-| Agent | 功能 |
-|---|---|
-| CheapAgent | 低成本快速评分，适合简单题 |
-| MidAgent | 中等能力评分，适合中等难度题 |
-| StrongAgent | 强推理评分，适合难题和长答题 |
-| EvidenceAgent | 检查答案是否命中标准答案、Rubric 或得分点 |
-| ArbitratorAgent | 当多个 Agent 分数冲突时进行仲裁 |
+- 相同 `dataset + prompt_group`；
+- 相同 exact prompt-answer/leakage component；
+- 上述关系传递连接形成的 connected component。
 
-不同 Agent 可以通过不同模型、不同提示词、不同推理深度或不同上下文长度实现。
-
----
-
-### 3.2 Agent 输出格式
-
-所有 Agent 输出统一为：
-
-```json
-{
-  "item_id": "asap_sas_000001",
-  "agent_id": "cheap_agent",
-  "pred_score": 2,
-  "confidence": 0.78,
-  "justification": "答案包含关键概念，但解释不完整。",
-  "cost": 0.01,
-  "latency": 0.8,
-  "token_usage": 320,
-  "gold_score": 2
-}
-```
-
----
-
-### 3.3 Agent 输出缓存
-
-为构建离线 RL 轨迹，需要先对训练集、验证集和测试集缓存所有 Agent 输出。
-
-缓存对象包括：
+以固定随机种子和预注册确定性算法把完整内部单元分配到：
 
 ```text
-CheapAgent
-MidAgent
-StrongAgent
-EvidenceAgent
-ArbitratorAgent
+train_fit
+train_calibration
 ```
 
-缓存文件：
+目标比例为约80%/20%，但优先级固定为：
+
+1. prompt、exact answer 和 component 完整性；
+2. 两个 split 都能覆盖三个数据集并构造 strict Paper；
+3. 最大化可构造的合法5题 Paper 总数；
+4. 在上述条件下最小化与80%/20%目标的偏差；
+5. 使用稳定 group hash/固定种子解决并列。
+
+不得为了凑精确比例拆开题目组，也不得根据 Router 或 Agent 实验结果重新分配 group。
+
+### 5.4 在两个内部 split 中分别重建 Paper
+
+Item 分配冻结后，分别运行 strict Paper builder：
 
 ```text
-outputs/agent_cache/
-├── cheap_agent_outputs.jsonl
-├── mid_agent_outputs.jsonl
-├── strong_agent_outputs.jsonl
-├── evidence_agent_outputs.jsonl
-└── arbitrator_agent_outputs.jsonl
+train_fit Item pool
+→ papers_train_fit.jsonl
+→ paper_train_fit_*
+
+train_calibration Item pool
+→ papers_train_calibration.jsonl
+→ paper_train_calibration_*
 ```
 
-这样做的好处是：
+每份内部 Paper 继续固定5题，并满足同一 strict dataset mix。硬约束：
 
-1. 离线 RL 训练不需要反复调用大模型；
-2. 轨迹构建可以完全复现；
-3. 可以精确记录 cost、latency、token usage；
-4. 能够自动计算 Agent 能力画像。
+- Paper 只能引用本 split Item；
+- 一个 Item 不得跨 split 或在同一内部实验范围重复引用；
+- 不得从另一 split 借 Item 完成 Paper；
+- 不能组成 strict Paper 的 leftover Item 单独记录，不静默丢失；
+- 新 `paper_id` 与原 `paper_train_*` 无语义继承关系，但保存来源 Item 与构造版本。
 
----
+### 5.5 四个数据阶段的最终职责
 
-## 4. 题目难度建模
+| 数据 | 唯一用途 | 禁止事项 |
+|---|---|---|
+| `train_fit` | 训练 Router、Stop-Risk Head、critics 和其他可学习状态组件；拟合正式能力画像 | 读取 calibration/dev/test；在其结果反馈后继续改参数 |
+| `train_calibration` | 为每个冻结 checkpoint 自动校准 STOP 安全概率边界；冻结质量参考、预算和画像支持度边界；组装完整候选 Policy Package | 更新模型参数、进入 replay buffer、比较不同 checkpoint 的最终资源排名或选冠军 |
+| `dev` | 对边界已冻结的 Package 运行各预算质量门，并跨预算资源排序选择唯一 Package/checkpoint | 重新拟合、移动或试探边界 |
+| `test` | 所有组件冻结后一次性最终评价 | 任何训练、校准、筛选或返回调参 |
 
-### 4.1 难度来源
+主 Router 的 Mid/Strong、VERIFY、A2A、ARBITRATE 和跨 Item 调度由 Routing Q Head 学习；`train_calibration` 不为这些动作生成一套升级阈值。阈值 baseline 可以在 calibration 上自动校准自身阈值，但 Dev 同样不得修改。
 
-难度标签不进行人工标注，而是自动生成。难度由两类信息组成：
-
-第一类是静态复杂度：
+### 5.6 必须生成的内部产物与审计
 
 ```text
-question_type
-prompt_len
-answer_len
-rubric_len
-score_range
-has_reference_answer
-dataset_id
+internal_item_split_manifest.csv
+papers_train_fit.jsonl
+papers_train_calibration.jsonl
+internal_paper_manifest.csv
+internal_split_audit.md
 ```
 
-第二类是 Agent 试评分表现：
+manifest 至少记录：
+
+- `item_id`、dataset、prompt group、leakage component；
+- internal split；
+- source external paper ID（仅溯源）；
+- new internal paper ID；
+- strict mix、构造规则版本、随机种子；
+- leftover reason。
+
+阻塞性审计必须满足：
 
 ```text
-CheapAgent error
-MidAgent error
-StrongAgent error
-Agent disagreement
-confidence variance
+Internal item overlap = 0
+Internal prompt-group overlap = 0
+Internal exact-answer/component overlap = 0
+Internal paper overlap = 0
+Cross-split paper reference error = 0
+Strict five-item paper violation = 0
+Strict dataset-mix violation = 0
+Calibration gradient/replay consumption = 0
 ```
 
----
+### 5.7 Test 红线
 
-### 4.2 难度分数
-
-定义题目难度分数：
-
-\[
-D_i =
-\alpha Err_{cheap}
-+
-\beta Err_{mid}
-+
-\gamma Disagreement_i
-+
-\delta Complexity_i
-\]
-
-其中：
-
-- \(Err_{cheap}\)：CheapAgent 与 gold score 的归一化误差；
-- \(Err_{mid}\)：MidAgent 与 gold score 的归一化误差；
-- \(Disagreement_i\)：多个 Agent 分数方差；
-- \(Complexity_i\)：题目静态复杂度。
-
----
-
-### 4.3 自动难度分层
-
-根据 \(D_i\) 自动划分：
+Test 不参与：
 
 ```text
-Easy:
-CheapAgent 误差低，Agent 分歧小。
-
-Medium:
-CheapAgent 不稳定，但 MidAgent 或 StrongAgent 能明显改善。
-
-Hard:
-CheapAgent 和 MidAgent 都不稳定，Agent 分歧高，通常需要 StrongAgent、A2A_ASK 或 ARBITRATE。
+Agent Prompt修改
+模型选择
+风险模型训练
+STOP边界校准
+质量参考选择
+能力画像
+预算档位生成
+指标协议修改
+reward调整
+checkpoint选择
+replay buffer
 ```
 
-难度文件：
+Test 结果不理想时，不能返回 Dev 改边界、改指标或改 checkpoint 后重复把同一 Test 当作最终测试。
+
+## 6. 正式质量误差、NMAE 与 QWK 协议
+
+### 6.1 Gate Error
+
+对存在合法 active cache 结果、最终分数可解析且位于题目分值范围内的 Item，定义：
+
+\[
+R_i=score_{max,i}-score_{min,i}
+\]
+
+\[
+E_i^{gate}=\frac{|\hat y_i-y_i|}{R_i}
+\]
+
+以下情况统一赋予最坏损失：
+
+\[
+E_i^{gate}=1
+\]
+
+- Deferral；
+- Budget Exhaustion 后仍未安全完成；
+- 最终分数缺失、越界或不可解析；
+- 无合法 active cache 结果。
+
+该规则防止方法通过放弃困难 Item 人为降低错误率。`train_fit` 可使用 `1-E_i^{gate}` 构造质量监督或 counterfactual 标签；正式 NMAE 与 Severe Error 必须直接基于 `E_i^{gate}`。
+
+### 6.2 Severe Error 与 Extreme Error
+
+\[
+Severe_i=\mathbf{1}[E_i^{gate}>0.25]
+\]
+
+\[
+Extreme_i=\mathbf{1}[E_i^{gate}\ge 0.50]
+\]
+
+`Severe Error` 进入主质量门；`Extreme Error` 只作补充敏感性分析。两个阈值均属于冻结指标协议，不在 `train_calibration` 学习，也不得根据实验结果调整。
+
+### 6.3 Unsafe Stop
+
+主指标定义为：
+
+\[
+UnsafeStopRisk=\frac{\#\{STOP\land Severe\}}{\#\{STOP\}}
+\]
+
+同时报告：
+
+- `Unsafe Stop / All Items`；
+- `Stop Coverage = STOP count / All Items`；
+- `Deferral Rate`。
+
+若 `STOP count = 0`，则 `UnsafeStopRisk = NA` 且 `Quality Feasible = No`，不能记为0，也不能通过从不停止规避不安全停止风险。
+
+### 6.4 Macro-NMAE
+
+对每个数据集分别计算：
+
+\[
+NMAE_g=\frac{1}{|I_g|}\sum_{i\in I_g}E_i^{gate}
+\]
+
+主指标为：
+
+\[
+MacroNMAE=\frac{NMAE_{DREsS}+NMAE_{ASAP-SAS}+NMAE_{SAS-Bench}}{3}
+\]
+
+三个数据集不加权平均，以避免样本量较大的数据集支配主结论。全部 Item 直接平均的 `Micro-NMAE` 只作补充。
+
+### 6.5 固定11档 Macro-QWK
+
+对 gold 和合法预测分数分别按题目分值范围归一化：
+
+\[
+z_i=\frac{score_i-score_{min,i}}{R_i}
+\]
+
+再使用 half-up 规则固定映射到0～10共11档：
+
+\[
+b_i=\min\left(10,\max\left(0,\left\lfloor 10z_i+0.5\right\rfloor\right)\right)
+\]
+
+正式 QWK 必须：
+
+1. 使用完整固定 label set `0..10`；
+2. 不得使用当前样本实际出现标签的 union；
+3. 分别计算 `QWK_DREsS`、`QWK_ASAP-SAS`、`QWK_SAS-Bench`；
+4. 对三个 dataset QWK 做不加权算术平均得到 `Macro-QWK`；
+5. 每个 dataset 至少包含100个有效完成 Item、至少2个非空 gold bin，且 expected weighted disagreement 大于0。
+
+任一 dataset 不满足第5项时，QWK 未定义并触发 `qwk_readiness_failure`；对应候选不得通过质量门。Deferral 或非法最终分数不进入 QWK 混淆矩阵，但已经通过 `Gate Error = 1` 进入 Severe Error 与 Macro-NMAE，不能因此获得质量优势。
+
+### 6.6 使用边界
+
+- QWK 是 dataset-level 统计指标，不能作为单条 Item 的即时 reward；
+- Severe/Extreme 阈值、11档映射、完整 label set 和 readiness 条件在任何真实 Pilot 与 Router 结果前冻结；
+- Dev/Test 使用完全相同的指标实现与协议 hash；
+- 补充 MAE、RMSE、Within-1 Accuracy 不替代主质量门。
+
+## 7. Agent 设计与冻结
+
+### 7.1 Agent 池
+
+| Agent | 角色 | 主要输出 |
+|---|---|---|
+| `CheapAgent` | 高吞吐基础评分 | score、confidence、依据 |
+| `MidAgent` | 常规评分 | score、confidence、依据 |
+| `StrongAgent` | 深度评分 | score、confidence、关键证据 |
+| `EvidenceAgent` | Rubric/参考答案核验 | matched/missing points、coverage、建议 |
+| `ArbitratorAgent` | 已获得意见的仲裁 | final score、confidence、仲裁理由 |
+
+`A2A_ASK(target)` 是路由操作，不是第六个独立 Agent。
+
+### 7.2 冻结内容
+
+Formal cache 前固定：
 
 ```text
-data/processed/difficulty_labels.jsonl
+model_id/model_revision
+Prompt文本/version/hash
+temperature/max_tokens
+请求上下文schema
+响应JSON schema
+解析规则
+Agent角色
+成本与延迟记录规则
+价格快照
 ```
 
----
+冻结 Agent 不等于能力画像，也不等于预先知道每题最优 Agent。
 
-## 5. Agent 能力建模
+### 7.3 Gold 隔离
 
-### 5.1 Agent Capability Table
-
-每个 Agent 在不同题型和难度上的表现被记录为能力画像。
-
-示例：
-
-| Agent | Question Type | Difficulty | QWK | MAE | Cost | Latency | Calibration |
-|---|---|---|---:|---:|---:|---:|---:|
-| CheapAgent | short_answer | easy | 0.86 | 0.21 | 0.01 | 0.8 | 0.74 |
-| CheapAgent | essay | hard | 0.42 | 0.91 | 0.02 | 1.3 | 0.51 |
-| StrongAgent | essay | hard | 0.78 | 0.39 | 0.12 | 6.8 | 0.73 |
-| ArbitratorAgent | conflict | hard | 0.81 | 0.34 | 0.10 | 5.9 | 0.76 |
-
----
-
-### 5.2 Agent 能力向量
-
-定义 Agent 能力向量：
-
-\[
-c_a =
-[
-acc_{a,type,d},
-mae_{a,type,d},
-cost_a,
-latency_a,
-calibration_a,
-load_a
-]
-\]
-
-其中：
-
-- \(acc_{a,type,d}\)：Agent 在某题型、某难度上的历史准确性；
-- \(mae_{a,type,d}\)：历史平均误差；
-- \(cost_a\)：平均调用成本；
-- \(latency_a\)：平均延迟；
-- \(calibration_a\)：置信度校准程度；
-- \(load_a\)：当前负载。
-
-能力画像文件：
+Agent 请求中禁止包含：
 
 ```text
-outputs/profiles/agent_capability_table.csv
+gold_score
+test误差
+最优Agent标签
+未调用Agent输出
 ```
 
----
-
-## 6. A2A 通信设计
-
-### 6.1 A2A 消息类型
-
-本实验保留 5 类核心消息：
-
-| 消息类型 | 作用 |
-|---|---|
-| VERIFY | 请求 EvidenceAgent 验证证据或得分点 |
-| A2A_ASK | 请求另一个评分 Agent 给第二意见 |
-| CHALLENGE | 一个 Agent 质疑另一个 Agent 的评分 |
-| JUSTIFICATION | Agent 解释自己的评分依据 |
-| ARBITRATE | 请求 ArbitratorAgent 进行最终仲裁 |
-
-A2A 本身不作为论文创新点，创新点在于：**Router 将 A2A 通信显式建模为可选择的路由动作，并学习何时通信、和谁通信、何时仲裁、何时停止。**
+Gold 只能在 Agent 返回后由 cache writer 关联，用于训练范围监督和最终评价。
 
 ---
 
-### 6.2 消息格式
+## 8. Agent Cache 与信息权限
 
-```json
-{
-  "message_id": "msg_000001",
-  "paper_id": "paper_000001",
-  "item_id": "asap_sas_000001",
-  "message_type": "A2A_ASK",
-  "sender": "Router",
-  "receiver": "MidAgent",
-  "payload": {
-    "current_score": 2,
-    "current_confidence": 0.62,
-    "request": "请给出第二评分意见。"
-  },
-  "response": {
-    "pred_score": 3,
-    "confidence": 0.71,
-    "justification": "答案包含关键概念，但表达不完整。"
-  },
-  "cost": 0.03,
-  "latency": 1.5
-}
-```
+### 8.1 Cache schema
 
----
-
-## 7. 离线强化学习建模
-
-本文核心 Router 为：
-
-# CAG-CQL：Communication-Aware Graph Conservative Q-Learning
-
-中文名：
-
-> 通信感知图结构保守 Q 学习路由算法
-
-CAG-CQL 是 A2A-DyGrade-RL 的核心。它不是普通 CQL 的直接套用，而是在自动阅卷场景中引入：
+每条记录至少包含：
 
 ```text
-1. Agent-Item Routing Graph Encoder
-2. GRU / Transformer A2A History Encoder
-3. Budget-aware State Encoding
-4. Action Masked Double Q Network
-5. Target Network
-6. Masked CQL Conservative Penalty
-7. Hindsight Budget Relabeling
-```
-
-CQL 适合本任务的原因是：离线强化学习需要从静态轨迹数据中学习策略，而不能进行高成本在线探索；CQL 通过保守 Q 函数降低离线数据外动作被过度高估的风险。([arxiv.org](https://arxiv.org/abs/2006.04779?utm_source=chatgpt.com)) 近年的 SeqRoute 已经将 LLM routing 建模为有限时域 MDP，并使用 CQL 和 Hindsight Budget Relabeling 学习预算感知的顺序路由策略，这为本文将 CQL 扩展到试卷级自动阅卷路由提供了直接方法依据。([arxiv.org](https://arxiv.org/abs/2605.25424?utm_source=chatgpt.com))
-
----
-
-## 8. MDP 定义
-
-### 8.1 状态空间
-
-对一张试卷 \(P=\{q_1,q_2,\ldots,q_n\}\)，第 \(t\) 步状态定义为：
-
-\[
-s_t = [X_t, D_t, G_t, H_t, B_t]
-\]
-
-其中：
-
-| 符号 | 含义 |
-|---|---|
-| \(X_t\) | 所有题目的当前评分状态 |
-| \(D_t\) | 题目难度状态 |
-| \(G_t\) | Agent-Item 能力图状态 |
-| \(H_t\) | A2A 通信历史状态 |
-| \(B_t\) | 剩余预算状态 |
-
-每道题 \(q_i\) 的状态为：
-
-\[
-x_i^t =
-[
-type_i,
-len_i,
-rubric\_len_i,
-score\_range_i,
-d_i,
-\hat{y}_i^t,
-u_i^t,
-conflict_i^t,
-done_i^t
-]
-\]
-
-预算状态为：
-
-\[
-B_t =
-[
-remaining\_cost,
-remaining\_latency,
-remaining\_calls,
-remaining\_messages
-]
-\]
-
----
-
-### 8.2 动作空间
-
-动作定义为：
-
-\[
-a_t=(i,o)
-\]
-
-其中：
-
-- \(i\)：选择第几道题；
-- \(o\)：对该题执行的操作。
-
-动作集合为：
-
-| 动作 | 含义 |
-|---|---|
-| `ROUTE_CHEAP(i)` | 调用 CheapAgent 批改第 \(i\) 题 |
-| `ROUTE_MID(i)` | 调用 MidAgent 批改第 \(i\) 题 |
-| `ROUTE_STRONG(i)` | 调用 StrongAgent 批改第 \(i\) 题 |
-| `VERIFY(i)` | 调用 EvidenceAgent 验证证据或得分点 |
-| `A2A_ASK(i)` | 请求另一个评分 Agent 给第二意见 |
-| `ARBITRATE(i)` | 调用 ArbitratorAgent 仲裁 |
-| `STOP(i)` | 停止第 \(i\) 题评分并输出当前分数 |
-
----
-
-### 8.3 动作掩码
-
-采用动作掩码，保证 Router 不会选择非法动作。
-
-设合法动作集合为：
-
-\[
-\mathcal{A}_{valid}(s_t)
-\]
-
-对非法动作：
-
-\[
-Q(s_t,a)=-\infty,\quad a\notin \mathcal{A}_{valid}(s_t)
-\]
-
-动作掩码规则：
-
-| 条件 | 屏蔽动作 |
-|---|---|
-| 题目已经完成 | 屏蔽所有非必要动作 |
-| 题目没有初评分 | 屏蔽 `VERIFY`、`A2A_ASK`、`ARBITRATE`、`STOP` |
-| 只有一个 Agent 给过分 | 屏蔽 `ARBITRATE` |
-| 剩余 cost 不足 | 屏蔽 `ROUTE_STRONG`、`ARBITRATE` |
-| 剩余 message budget 为 0 | 屏蔽 `VERIFY`、`A2A_ASK` |
-| 题目已经仲裁 | 屏蔽再次 `ARBITRATE` |
-
-动作掩码用于：
-
-```text
-1. 训练时 target Q 的 max 操作；
-2. 推理时 action selection；
-3. CQL conservative penalty 的 logsumexp 动作集合。
-```
-
----
-
-## 9. 模型结构设计
-
-### 9.1 总体结构
-
-```text
-Item Encoder
-      ↓
-Agent Capability Encoder
-      ↓
-Budget Encoder
-      ↓
-Agent-Item Routing Graph Encoder
-      ↓
-A2A History Encoder
-      ↓
-Double Q Network + Target Network
-      ↓
-Action Mask
-      ↓
-CAG-CQL Router
-```
-
----
-
-### 9.2 Item Encoder
-
-每道题的输入包括文本特征和结构化特征。
-
-文本特征：
-
-```text
-prompt embedding
-rubric embedding
-student_answer embedding
-reference_answer embedding
-```
-
-结构化特征：
-
-```text
-question_type
-dataset_id
-answer_len
-rubric_len
-score_range
-difficulty_score
-current_score
-uncertainty
-conflict_score
-done_flag
-```
-
-题目表示：
-
-\[
-h_i^{item}=MLP([emb_i;feat_i])
-\]
-
----
-
-### 9.3 Agent Capability Encoder
-
-Agent 能力向量：
-
-\[
-c_a =
-[
-acc_{a,type,d},
-mae_{a,type,d},
-cost_a,
-latency_a,
-calibration_a,
-load_a
-]
-\]
-
-Agent 表示：
-
-\[
-h_a^{agent}=MLP(c_a)
-\]
-
----
-
-### 9.4 Budget Encoder
-
-预算向量：
-
-\[
-b_t =
-[
-remaining\_cost,
-remaining\_latency,
-remaining\_calls,
-remaining\_messages
-]
-\]
-
-预算表示：
-
-\[
-h_B=MLP(b_t)
-\]
-
----
-
-## 10. Agent-Item Routing Graph Encoder
-
-### 10.1 图结构
-
-构造异构图：
-
-\[
-\mathcal{G}_t=(\mathcal{V}_I,\mathcal{V}_A,\mathcal{V}_B,\mathcal{E})
-\]
-
-节点类型：
-
-```text
-Item nodes: q1, q2, ..., qn
-Agent nodes: CheapAgent, MidAgent, StrongAgent, EvidenceAgent, ArbitratorAgent
-Budget node: B
-```
-
-边类型：
-
-| 边类型 | 含义 |
-|---|---|
-| Item-Agent Edge | 某 Agent 是否适合处理某题 |
-| Item-Budget Edge | 某题预计消耗预算 |
-| Agent-Budget Edge | 某 Agent 的 cost、latency、load |
-| Item-Item Edge | 同一试卷中题目之间竞争全局预算 |
-
----
-
-### 10.2 节点特征
-
-Item 节点：
-
-\[
-v_i =
-[
-h_i^{item},
-difficulty_i,
-uncertainty_i,
-conflict_i,
-done_i
-]
-\]
-
-Agent 节点：
-
-\[
-v_a =
-[
-h_a^{agent},
-agent\_type_a,
-cost_a,
-latency_a,
-load_a
-]
-\]
-
-Budget 节点：
-
-\[
-v_B = h_B
-\]
-
----
-
-### 10.3 边特征
-
-Item-Agent 边：
-
-\[
-e_{i,a} =
-[
-match(i,a),
-expected\_quality_{i,a},
-expected\_cost_a,
-expected\_latency_a,
-historical\_mae_{i,a}
-]
-\]
-
-其中：
-
-- \(match(i,a)\)：题型与 Agent 专长是否匹配；
-- \(expected\_quality_{i,a}\)：Agent 对该题型/难度的历史质量；
-- \(expected\_cost_a\)：调用成本；
-- \(expected\_latency_a\)：平均延迟；
-- \(historical\_mae_{i,a}\)：相似题上的历史误差。
-
----
-
-### 10.4 图编码器
-
-使用 Heterogeneous Graph Transformer 或 Heterogeneous Graph Attention Network。
-
-消息传递：
-
-\[
-h_i^{(l+1)}
-=
-\sigma
-\left(
-W_Ih_i^{(l)}
-+
-\sum_{a\in \mathcal{N}(i)}
-\alpha_{ia}^{(l)}W_Ah_a^{(l)}
-+
-W_Ee_{i,a}
-\right)
-\]
-
-注意力权重：
-
-\[
-\alpha_{ia}
-=
-softmax
-\left(
-\frac{
-(W_Qh_i)^\top(W_Kh_a)+W_Re_{i,a}
-}{
-\sqrt{d}
-}
-\right)
-\]
-
-最终输出：
-
-```text
-h_i：题目节点表示
-h_a：Agent 节点表示
-h_G：全局图表示
-```
-
-该模块是本文核心创新之一，用于建模题目与 Agent 能力之间的动态匹配关系。
-
----
-
-## 11. A2A History Encoder
-
-### 11.1 消息序列
-
-对第 \(i\) 道题，通信历史为：
-
-\[
-H_i^t=[m_1,m_2,\ldots,m_k]
-\]
-
-每条消息 \(m_j\) 包含：
-
-```text
-message_type
-sender_agent
-receiver_agent
-score_before
-score_after
-confidence_before
-confidence_after
-disagreement_before
-disagreement_after
+item_id
+agent_id
+split
+pred_score
+confidence
+justification
+evidence
 cost
 latency
+token_usage
+model_id
+prompt_version
+prompt_hash
+context_hash
+cache_key
+execution_mode
+status/error
 ```
 
----
+### 8.2 模式隔离
 
-### 11.2 消息嵌入
+```text
+fixture_smoke_<run_id>
+real_pilot_<run_id>
+formal_agent_cache_<run_id>
+```
 
-每条消息编码为：
+Fixture、Pilot 和 Formal active cache 不得互相复制、续跑或晋升。
 
-\[
-z_j =
-[
-emb(type_j),
-emb(sender_j),
-emb(receiver_j),
-\Delta score_j,
-\Delta confidence_j,
-\Delta disagreement_j,
-cost_j,
-latency_j
-]
-\]
+### 8.3 主 Cache 范围
 
----
+Formal 主路由 cache 只覆盖 Paper 引用 Item：
 
-### 11.3 GRU / Transformer History Encoder
+```text
+Train 27,375
+Dev 980
+Test 7,830
+```
 
-主实现采用 Transformer History Encoder，资源受限时可切换为 GRU。
+实际范围必须写入 cache manifest 和数据指纹。
 
-GRU 版本：
+### 8.4 Arbitrator 上下文
 
-\[
-h_{H_i}=GRU(z_1,z_2,\ldots,z_k)
-\]
+Arbitrator 只能看到已经实际调用的意见。Cache key 必须包含：
 
-Transformer 版本：
+```text
+参与Agent集合
+已有score/confidence
+已有Evidence
+context_hash
+```
 
-\[
-Z_i=[z_1,z_2,\ldots,z_k]+PE
-\]
+不得通过 Arbitrator 间接获得尚未调用的 StrongAgent 等输出。
 
-\[
-H_i=TransformerEncoder(Z_i)
-\]
+### 8.5 Formal Context Support Catalog
 
-\[
-h_{H_i}=Pool(H_i)
-\]
+为避免离线 cache 对任意上下文组合无限展开，正式 cache 前必须预注册有限的 `context_support_catalog.json`，列出允许的 Agent、上下文模板、前置可见意见集合、`context_template_id` 和版本指纹。
 
-其中 \(h_{H_i}\) 表示第 \(i\) 道题的 A2A 通信历史，用于 Q 网络动作价值估计。
+离线 Router 只能选择“结构合法、预算可行且当前 context 存在有效 active cache record”的动作；不在 catalog 中或缺少合法记录的动作必须被 Action Mask 屏蔽并记录 `unsupported_context/cache_missing`，不得在评价时临时调用在线模型补齐。所有 baseline、消融和主方法共享同一 catalog。
 
 ---
 
-## 12. Q 网络设计
+## 9. Agent 能力画像
 
-### 12.1 Q 网络输入
+能力画像在 Agent 定义已冻结且 `train_fit` Formal cache 通过审计后自动生成。用于 Router 训练和推断的画像统计参数只允许由 `train_fit` 拟合；若存在 low-support 或置信校准边界，只允许在 `train_calibration` 按预注册程序自动校准，不得将 calibration 样本回流梯度训练。建议包含：
 
-对动作 \(a_t=(i,o)\)，Q 网络输入为：
+```text
+Agent
+可观察任务属性
+NMAE
+严重错分率
+confidence calibration
+cost
+elapsed time
+sample count
+uncertainty/low_support
+```
+
+能力画像只提供历史先验，不能：
+
+- 直接指定某道题的最优 Agent；
+- 使用 Test；
+- 按照 Test 结果手工修改；
+- 替代当前评分、证据和分歧状态。
+
+必须设置 `without capability profile` 消融。
+
+现有静态 difficulty 工程产物可作为诊断或初始特征，但正式论文状态统一改为：
+
+> **动态未解决评分风险（unresolved scoring risk）**。
+
+---
+
+## 10. 模拟试卷级共享资源
+
+### 10.1 资源向量
 
 \[
-\phi(s_t,i,o)
-=
-[
-h_i,
-h_G,
-h_{H_i},
-h_B,
-h_o,
-h_{agent(o)}
-]
+B_P=[C_{max},T_{max},N_{max},M_{max}]
 \]
 
-其中：
+对应：
 
-| 表示 | 含义 |
+```text
+max_cost
+max_elapsed_time
+max_agent_calls
+max_a2a_exchanges
+```
+
+### 10.2 累计定义
+
+\[
+C(\tau)=\sum_t c(a_t)
+\]
+
+\[
+T(\tau)=\sum_t \ell(a_t)
+\]
+
+\[
+N(\tau)=\sum_t\mathbf 1[a_t\text{调用Agent}]
+\]
+
+\[
+M(\tau)=\sum_t\mathbf 1[a_t=A2A\_ASK]
+\]
+
+第一版 `T` 是串行累计调用延迟，不称为真实并行 makespan。
+
+### 10.3 动作消耗
+
+| 动作 | Calls | A2A Exchanges |
+|---|---:|---:|
+| `ROUTE_CHEAP/MID/STRONG` | 1 | 0 |
+| `VERIFY` | 1 | 0 |
+| `A2A_ASK(target)` | 1 | 1 |
+| `ARBITRATE` | 1 | 0 |
+| `STOP` | 0 | 0 |
+
+### 10.4 预算自动产生
+
+当前已实现 fixture 仍使用以下 legacy 字段，仅用于 smoke 兼容：
+
+```yaml
+max_cost: 0.20
+max_latency: 30.0
+max_agent_calls: 12
+max_a2a_messages: 6
+```
+
+其中 `max_latency` 与 `max_a2a_messages` 分别映射到正式语义 `max_elapsed_time` 与 `max_a2a_exchanges`。V1.3 实现阶段必须将 Formal schema 和新产物统一为正式字段；legacy 字段只能作为旧 fixture 的显式兼容输入，并在 manifest 中记录迁移，不得出现在正式论文预算产物中。
+
+上述数值只用于 smoke，不直接作为正式论文预算。
+
+真实 Agent Pilot 只用于估算调用质量、费用和可行性。Formal Tight/Medium/Loose 必须在冻结 Agent cache 后，使用 `train_fit/train_calibration` 中完整5题 Paper 上的预注册固定 behavior/reference policies 产生 paper-level cost、elapsed time、calls 和 exchanges 分布，再按预注册分位数（例如25/50/75）自动生成。预算生成后保存 manifest，不根据主方法结果移动档位。
+
+### 10.5 预算耗尽
+
+预算耗尽而任务未安全完成时：
+
+```text
+budget_exhausted = true
+unfinished/deferral = true
+```
+
+不得强制 `STOP` 或虚构人工复核。
+
+---
+
+## 11. MDP/CMDP 定义
+
+### 11.1 状态
+
+\[
+s_t=[S_t^{item},S_t^{agent},S_t^{history},B_t^{remain}]
+\]
+
+Item 状态：
+
+```text
+题型和可观察文本特征
+当前候选分数
+已获得confidence/evidence/disagreement
+已调用Agent集合
+完成状态
+动态未解决风险
+```
+
+Agent 状态：
+
+```text
+角色
+能力画像先验
+成本/延迟
+是否已调用
+当前是否合法
+```
+
+History 状态：
+
+```text
+评分调用
+A2A exchange
+Evidence
+仲裁
+```
+
+Budget 状态：
+
+```text
+remaining_cost
+remaining_elapsed_time
+remaining_calls
+remaining_exchanges
+```
+
+状态中禁止包含 gold 和未调用 Agent 输出。
+
+### 11.2 动作
+
+\[
+a_t=(i_t,o_t)
+\]
+
+```text
+ROUTE_CHEAP
+ROUTE_MID
+ROUTE_STRONG
+VERIFY
+A2A_ASK(target_agent)
+ARBITRATE
+STOP
+```
+
+### 11.3 转移
+
+执行动作后：
+
+1. 环境查询对应隐藏 cache；
+2. 暴露本次 Agent 输出；
+3. 更新当前分数、证据和分歧；
+4. 扣除资源；
+5. 更新风险、历史和动作掩码；
+6. Router 选择下一步。
+
+---
+
+## 12. Cache 逐步暴露硬约束
+
+Agent cache 只能作为隐藏环境查询表。
+
+正确流程：
+
+```text
+Router选择动作
+→ 环境查询对应cache
+→ 只暴露该动作的输出
+→ 更新状态
+→ Router继续决策
+```
+
+严禁：
+
+```text
+初始状态同时提供Cheap/Mid/Strong/Evidence/Arbitrator全部结果
+```
+
+否则问题退化为预知结果后的分类或组合优化。
+
+隐藏 cache 必须有单元和集成测试，任何未调用输出进入状态均为阻塞性错误。
+
+---
+
+## 13. 动作掩码
+
+### 13.1 结构掩码
+
+- 无合法评分时不能 `STOP`；
+- 只有一个评分意见时不能 `ARBITRATE`；
+- 没有 Evidence 上下文时不能执行依赖 Evidence 的仲裁；
+- 已完成 Item 不再调用 Agent；
+- 同一 context 不重复仲裁；
+- Agent 输入权限不满足时屏蔽动作。
+
+### 13.2 资源掩码
+
+动作会使 cost/time/calls/exchanges 任一资源为负时屏蔽。
+
+### 13.3 质量安全约束
+
+结构合法不等于质量安全。`STOP` 还需经过 Stop-Risk Head 的自动校准风险约束。
+
+---
+
+## 14. CAG-CQL Router 架构
+
+### 14.1 最小正式架构
+
+```text
+CAG Shared Encoder
+├── Routing Q Head
+├── Stop-Risk / Safety Head
+└── Resource Critic
+```
+
+### 14.2 CAG Shared Encoder
+
+节点包括：
+
+- Item；
+- Agent；
+- Budget/Episode；
+- 可选消息或评分意见。
+
+边只表示已经发生的调用、证据和通信。未调用 Agent 不得带预测输出边。
+
+### 14.3 Routing Q Head
+
+学习任务—操作的长期价值，保留：
+
+- Double Q；
+- Target Network；
+- Action Mask；
+- CQL conservative penalty；
+- 预算条件状态。
+
+### 14.4 Resource Critic
+
+预测候选动作未来累计 cost、elapsed time、calls 和 exchanges，帮助在质量可行动作中选择资源更低的长期路径。
+
+### 14.5 方法属性
+
+加入 Stop-Risk Head 后，方法仍属于强化学习，更准确地称为：
+
+> **带学习型安全约束的离线强化学习路由方法。**
+
+如果风险头直接决定全部升级路径、Router 只执行固定规则，则会退化成分类器；因此风险头仅能约束 `STOP`。
+
+---
+
+## 15. Stop-Risk Head
+
+### 15.1 作用
+
+\[
+r_\psi(s_{i,t})=P\left(E_{i,t}^{gate}>0.25\mid s_{i,t}, STOP\right)
+\]
+
+它只回答：
+
+> 当前对该 Item 执行 `STOP` 是否存在严重错分风险？
+
+它不能回答：
+
+- 下一步调用哪个 Agent；
+- 下一步处理哪道题；
+- 是否必须调用 Evidence 或 Strong；
+- 其他任务如何分配预算。
+
+### 15.2 训练标签
+
+在 `train_fit`，对每个结构上可停止的可见状态计算当前候选分数的 `Gate Error`，自动生成：
+
+\[
+y_{stop-risk}=\mathbf{1}[E_{i,t}^{gate}>0.25]
+\]
+
+其中 `0.25` 是冻结的 Severe Error 指标阈值，不由 Stop-Risk Head 学习，不在 calibration 调整。Deferral、无合法最终分数等状态按 `Gate Error = 1` 产生严重风险标签。
+
+### 15.3 自动校准
+
+`train_calibration` 学习的是“对当前冻结 checkpoint，预测风险概率达到什么边界时允许 STOP”，不是学习 Severe Error 的定义，也不是选择最终 Router。
+
+固定流程：
+
+1. checkpoint 的 Router 与 Stop-Risk Head 参数先冻结；
+2. 只在该 checkpoint 的 calibration Paper 上收集可停止状态风险与 Severe 标签；
+3. 由预注册算法自动产生一个 STOP 安全概率边界或 calibration failure；
+4. 保存边界、覆盖率、质量约束、失败原因和 hash；
+5. 与质量参考、预算、特征 schema 等组装为该 checkpoint 的 Policy Package；
+6. calibration 不比较不同 checkpoint 的 Cost/Time/Calls/Exchanges，也不选择最终 Package；
+7. Dev 只能比较这些已冻结 Package，不能移动边界。
+
+`0.25` Severe 阈值、QWK 分档和 Bootstrap 规则均不参与校准。主 Router 的升级、核验、二评和仲裁仍由 Routing Q Head 决定；不得由 calibration 额外生成 `risk < x -> Strong` 等固定规则。
+
+校准失败、无可行边界或 STOP 覆盖为0时必须保留失败状态，不能把风险记为0。
+
+### 15.4 推断
+
+Router 提议 `STOP` 时：
+
+```text
+结构合法
++ 预算合法
++ 已存在合法候选分数
++ 学习风险满足自动校准边界
+→ STOP进入质量可行动作集合
+```
+
+若 `STOP` 被屏蔽，下一步具体操作仍由 Routing Q Head 在其他合法动作中决定。
+
+### 15.5 消融
+
+必须比较：
+
+```text
+CAG-CQL + Stop-Risk Head
+CAG-CQL without Stop-Risk Head
+Risk Classifier + Fixed Upgrade
+Risk Classifier + Greedy
+```
+
+以区分“停止安全预测”与“跨 Item、多动作、长期资源分配”的强化学习贡献。
+
+## 16. 质量参考策略自动产生
+
+### 16.1 候选集合
+
+在正式实验前固定候选定义与执行语义：
+
+```text
+Always-Cheap
+Always-Mid
+Always-Strong
+Fixed Cascade
+Fixed Full Multi-Agent Workflow
+```
+
+### 16.2 自动选择
+
+在 `train_calibration` 上对每个预注册预算档位分别执行 readiness 检查，并按以下固定质量优先顺序选择该档位的参考策略。该步骤只在预定义 reference policies 之间建立质量门锚点，不比较或选择 Router checkpoint：
+
+```text
+Quality Metrics Defined = Yes
+→ Worst-Dataset Severe Error（低）
+→ Worst-Dataset Unsafe Stop（低）
+→ Macro-NMAE（低）
+→ Macro-QWK（高）
+→ Cost/Paper（低，仅质量完全并列时）
+→ Elapsed Time/Paper（低）
+→ Agent Calls/Paper（低）
+→ A2A Exchanges/Paper（低）
+→ Reference Policy ID（确定性并列规则）
+```
+
+输出 `quality_reference_manifest.json`，记录 `budget_id -> reference_policy_id`、全部候选指标、readiness、排序键、淘汰原因、协议 hash 和数据/cache 指纹。研究者不能为使主方法容易通过而手工选择较弱参考。
+
+冻结的是参考策略的 ID、定义、预算对应关系和选择程序，不是把 `train_calibration` 上的数值指标直接搬到 Dev/Test。进入 Dev 或 Test 时，冻结参考策略与候选策略必须在同一 split、同一 Paper、同一 Agent cache 和同一预算档位上配对评价。
+
+若某预算档位没有任何参考候选满足 STOP 与 QWK readiness，则该档位状态为 `quality_reference_readiness_failure`，不得进入 Router 成功声明，也不得在看到 Dev/Test 后更换候选集合。
+
+### 16.3 Paper 级配对统计质量门
+
+对候选策略 \(\pi\) 与对应参考策略 \(\pi_{ref}\)，定义所有差值为“候选减参考”。固定使用 Paper 级配对 Cluster Bootstrap：
+
+```yaml
+unit: paper
+paired: true
+replicates: 5000
+confidence_level: 0.95
+sidedness: one_sided
+noninferiority_margin: 0
+seed: 20260729
+```
+
+每次重采样使用同一组 Paper 索引同时计算候选和参考指标，并保留 Paper 内5道题的相关性。候选仅在以下条件全部成立时标记为 `Quality Feasible = Yes`：
+
+\[
+UCB_{95}\left(\max_g\Delta Severe_g\right)\le 0
+\]
+
+\[
+UCB_{95}\left(\max_g\Delta UnsafeStop_g\right)\le 0
+\]
+
+\[
+UCB_{95}\left(\Delta MacroNMAE\right)\le 0
+\]
+
+\[
+LCB_{95}\left(\Delta MacroQWK\right)\ge 0
+\]
+
+其中 \(g\in\{DREsS, ASAP\text{-}SAS, SAS\text{-}Bench\}\)。若候选或参考任一主指标未定义、`STOP count = 0`、QWK readiness 失败、Bootstrap 失败、置信区间跨0或未达到边界，统一输出 `quality_noninferiority_inconclusive` 或更具体 readiness failure，并令 `Quality Feasible = No`。
+
+零非劣效界表示本研究不预先允许任何质量下降；资源收益不能补偿统计质量门失败。
+
+## 17. 质量绝对优先的优化目标
+
+不使用：
+
+\[
+\max_\pi\left(QWK-\beta Cost\right)
+\]
+
+作为主模型选择原则，因为手工或结果后调整 \(\beta\) 会把质量损失转化为可接受的资源收益。
+
+正式目标分两层：
+
+1. **预算档位质量门**：同一个预算条件 Policy Package 必须在 Tight/Medium/Loose 每个预注册档位上分别通过第16.3节的零容忍配对统计质量门；
+2. **Package 资源优化**：仅在所有预算档位均可行的候选 Package 中最小化跨预算等权聚合的每 Paper 资源消耗。
+
+设正式预算集合为 \(\mathcal B\)，定义：
+
+\[
+\overline{C}=\frac{1}{|\mathcal B|}\sum_{b\in\mathcal B}CostPerPaper_b
+\]
+
+Elapsed Time、Agent Calls 和 A2A Exchanges 使用相同的不加权平均。Dev 固定词典序为：
+
+```text
+Package Quality Feasible = Yes（所有预算档位通过）
+→ Mean-Budget Cost/Paper（低）
+→ Mean-Budget Elapsed Time/Paper（低）
+→ Mean-Budget Agent Calls/Paper（低）
+→ Mean-Budget A2A Exchanges/Paper（低）
+→ Worst-(Budget,Dataset) Severe Error（低，仅资源并列时）
+→ Worst-(Budget,Dataset) Unsafe Stop（低）
+→ Mean-Budget Macro-NMAE（低）
+→ Mean-Budget Macro-QWK（高）
+→ Policy Package ID（升序，确定性最终并列规则）
+```
+
+质量指标出现在资源指标之后仅用于打破资源并列，不表示允许质量下降：进入该排序前，候选已经在每个正式预算档位通过同一个零容忍质量门。
+
+训练实现可使用 separate critics、Lagrangian/primal-dual 或 constrained CQL，但质量与资源不得压成由研究者结果后调节的单一手工权重。最终只冻结一个能够以剩余预算为状态输入的 Policy Package/checkpoint，不得按预算档位人工挑选不同模型。
+
+## 18. 参数训练、边界校准和最终 Router 选择
+
+### 18.1 Train Fit：只训练参数
+
+`train_fit` 使用重建后的 `paper_train_fit_*`，训练：
+
+```text
+CAG encoder
+Routing Q Head
+Stop-Risk Head
+Resource Critic
+必要状态组件
+```
+
+同时生成预注册范围内的候选 checkpoint。Router 将剩余预算作为状态输入，同一个 checkpoint 适配 Tight/Medium/Loose。
+
+`train_fit` 不读取 `train_calibration/dev/test`，能力画像主体也只由 train_fit formal cache 拟合。Severe/Extreme 指标阈值、QWK 分档、Bootstrap 和 Dev 排序不是可学习参数。
+
+### 18.2 Train Calibration：只固定每个方案的使用边界
+
+`train_calibration` 使用独立重建的 `paper_train_calibration_*`，先冻结环境侧定义：
+
+- 每个预算档位的质量参考映射；
+- Tight/Medium/Loose 预算；
+- 能力画像 low-support/uncertainty 边界；
+- quality protocol 和 support catalog hash。
+
+然后对每个固定 checkpoint 独立执行：
+
+1. 校准该 checkpoint 的 STOP 安全概率边界；
+2. 检查 calibration coverage 和 failure；
+3. 将单一 Router checkpoint、Stop-Risk Head、STOP 边界、参考映射、预算和全部 hash 组装为 Policy Package。
+
+calibration 明确禁止：
+
+- 更新 Router/Stop-Risk/critic 参数；
+- 将 calibration trajectory 放入 replay buffer；
+- 在不同 checkpoint 之间按资源或质量排名；
+- 选择最终 Router；
+- 为 Mid/Strong/VERIFY/A2A/ARBITRATE 生成主方法升级阈值。
+
+因此它的输出是“一组边界已固定的候选 Package”，不是最终冠军。
+
+### 18.3 Dev Auto-Select：只选择完整 Package
+
+Dev 对每个候选 Policy Package 执行以下不可更改流程：
+
+1. 读取冻结的预算—参考映射、STOP 边界、指标协议和候选 Package；
+2. 在 Tight/Medium/Loose 每个预算档位分别运行 Paper 级配对 Bootstrap 质量门；
+3. 任一档位 `Quality Feasible = No` 或 readiness failure，则淘汰整个 Package；
+4. 在所有预算档位均可行的剩余 Package 中，按 `Mean-Budget Cost/Paper -> Mean-Budget Elapsed Time/Paper -> Mean-Budget Agent Calls/Paper -> Mean-Budget A2A Exchanges/Paper -> Worst-(Budget,Dataset) Severe -> Worst-(Budget,Dataset) Unsafe Stop -> Mean-Budget Macro-NMAE -> Mean-Budget Macro-QWK -> Policy Package ID` 自动选择唯一 Package；
+5. 保存每个档位的指标与置信区间、跨预算聚合键、淘汰原因和最终选择。
+
+Dev 不重新训练、不重新校准、不移动阈值、不更换指标定义，也不按预算档位人工挑不同 checkpoint。
+
+### 18.4 Freeze
+
+生成 `policy_freeze_manifest.json`，锁定：
+
+```text
+唯一 Router checkpoint / Policy Package
+模型与Prompt
+STOP安全概率边界
+指标协议与代码hash
+预算档位
+质量参考映射
+Bootstrap配置
+各预算档位质量门结果
+跨预算资源排序键
+internal item/paper manifest hash
+Agent cache/data/code指纹
+```
+
+### 18.5 Test
+
+Test 只执行一次性 final evaluation。唯一冻结 Package 在每个预算档位上分别与对应参考重算 Test 指标与配对置信区间；只有全部正式预算档位通过时，Package 级 `Quality Feasible = Yes`。任一档位失败或结果未定义，保留失败并如实报告，不返回调参。
+
+## 19. 离线轨迹构建
+
+### 19.1 Behavior Policies
+
+使用固定且预注册的 behavior policies：
+
+```text
+固定Agent
+固定级联
+自动阈值
+A2A/仲裁
+myopic/greedy
+多预算探索
+```
+
+### 19.2 轨迹字段
+
+```text
+visible_state
+valid_action_mask
+action
+revealed_output
+resource_delta
+next_visible_state
+stop_risk_label（train only）
+done
+failure_reason
+```
+
+### 19.3 Replay Buffer
+
+只使用 `train_fit` 轨迹。Calibration、Dev、Test 不进入梯度训练。
+
+### 19.4 HBR
+
+Hindsight Budget Relabeling 可保留，但：
+
+- 不改变质量标签；
+- 不读取 Test；
+- 必须消融；
+- 不用于人为制造某个预算档位优势。
+
+---
+
+## 20. Baseline 设计
+
+### 20.1 固定方法
+
+- Always-Cheap；
+- Always-Mid；
+- Always-Strong；
+- Fixed Full Multi-Agent Workflow。
+
+### 20.2 自动校准和监督方法
+
+- Single Agent + Automatically Calibrated Confidence Routing；
+- Static Feature Classifier。
+
+### 20.3 非 RL 动态方法
+
+- Fixed Cascade；
+- Contextual Bandit；
+- Per-item Myopic Router；
+- Greedy Marginal Utility；
+- Top-k/Knapsack Allocation。
+
+### 20.4 主方法
+
+- Quality-Constrained CAG-CQL + Stop-Risk Head。
+
+所有方法共享：
+
+```text
+prepared data
+simulated papers
+hidden Agent cache
+budget tiers
+cost/elapsed definitions
+random seeds
+evaluation code
+```
+
+如简单方法达到相同质量—资源前沿，应收缩 RL 必要性结论。
+
+---
+
+## 21. 消融实验
+
+至少包括：
+
+| 消融 | 验证内容 |
 |---|---|
-| \(h_i\) | Graph Encoder 输出的题目节点表示 |
-| \(h_G\) | 全局试卷图表示 |
-| \(h_{H_i}\) | A2A History Encoder 输出 |
-| \(h_B\) | Budget Encoder 输出 |
-| \(h_o\) | 动作类型 embedding |
-| \(h_{agent(o)}\) | 动作对应 Agent 表示 |
+| Without Stop-Risk Head | 安全头是否降低严重错分和不安全停止 |
+| Without Automatic Risk Calibration | 自动校准是否必要 |
+| Without A2A | 通信是否有增益 |
+| Without Budget State | 全局机会成本是否被利用 |
+| Without Capability Profile | 历史能力先验是否有效 |
+| Without CAG | 图结构是否必要 |
+| Without HBR | 预算重标记是否有效 |
+| Risk Classifier + Fixed Upgrade | 是否分类器已经足够 |
 
-Q 值：
-
-\[
-Q_\theta(s_t,i,o)=MLP(\phi(s_t,i,o))
-\]
+“提前暴露全部 cache”只能作为非法 oracle 诊断上界，不能作为正式可比较方法。
 
 ---
 
-### 12.2 Double Q Network
+## 22. 评价指标与统计报告
 
-维护两个 Q 网络：
+### 22.1 主质量与安全指标
 
-\[
-Q_{\theta_1}, Q_{\theta_2}
-\]
-
-用于减少动作价值过估计：
-
-\[
-Q_{min}(s,a)=\min(Q_{\theta_1}(s,a),Q_{\theta_2}(s,a))
-\]
-
----
-
-### 12.3 Target Network
-
-维护两个 target networks：
-
-\[
-Q_{\bar{\theta}_1}, Q_{\bar{\theta}_2}
-\]
-
-使用 soft update：
-
-\[
-\bar{\theta}\leftarrow \tau\theta+(1-\tau)\bar{\theta}
-\]
-
----
-
-### 12.4 Masked Bellman Target
-
-只在合法动作集合中计算下一步最大 Q 值：
-
-\[
-a'^{*}
-=
-\arg\max_{a'\in\mathcal{A}_{valid}(s')}
-Q_{\theta_1}(s',a')
-\]
-
-\[
-y=
-r+\gamma
-\min
-\left(
-Q_{\bar{\theta}_1}(s',a'^{*}),
-Q_{\bar{\theta}_2}(s',a'^{*})
-\right)
-\]
-
-TD loss：
-
-\[
-\mathcal{L}_{TD}
-=
-\sum_{j=1}^{2}
-\mathbb{E}_{(s,a,r,s')\sim D}
-[
-(Q_{\theta_j}(s,a)-y)^2
-]
-\]
-
----
-
-### 12.5 Masked CQL Conservative Penalty
-
-CQL 保守项只在合法动作集合上计算：
-
-\[
-\mathcal{L}_{CQL}
-=
-\mathbb{E}_{s\sim D}
-\left[
-\log
-\sum_{a'\in\mathcal{A}_{valid}(s)}
-\exp(Q_\theta(s,a'))
--
-Q_\theta(s,a)
-\right]
-\]
-
-总损失：
-
-\[
-\mathcal{L}
-=
-\mathcal{L}_{TD}
-+
-\alpha_{cql}\mathcal{L}_{CQL}
-+
-\alpha_{bc}\mathcal{L}_{BC}
-\]
-
-其中：
-
-- \(\mathcal{L}_{TD}\)：Bellman temporal-difference loss；
-- \(\mathcal{L}_{CQL}\)：保守 Q 学习惩罚项；
-- \(\mathcal{L}_{BC}\)：行为克隆正则；
-- \(\alpha_{cql}\)：CQL 权重；
-- \(\alpha_{bc}\)：行为克隆权重。
-
----
-
-## 13. 奖励函数设计
-
-### 13.1 单题质量奖励
-
-对第 \(i\) 道题：
-
-\[
-R_i = score\_max_i-score\_min_i
-\]
-
-\[
-E_i=\frac{|\hat{y}_i-y_i|}{R_i}
-\]
-
-\[
-Q_i=1-E_i
-\]
-
-其中：
-
-- \(Q_i\) 越大，评分越接近 gold score；
-- \(Q_i\) 是归一化质量奖励。
-
----
-
-### 13.2 步级奖励
-
-对于非终止动作：
-
-\[
-r_t
-=
--\beta cost(a_t)
--\gamma latency(a_t)
--\lambda msg(a_t)
-+
-\omega \max(0,\Delta Conflict_i)
--
-\eta P_{useless}
-\]
-
-其中：
-
-- \(cost(a_t)\)：当前动作成本；
-- \(latency(a_t)\)：当前动作延迟；
-- \(msg(a_t)\)：当前动作是否产生 A2A 消息；
-- \(\Delta Conflict_i\)：通信前后分歧下降量；
-- \(P_{useless}\)：无效通信惩罚。
-
-分歧下降量：
-
-\[
-\Delta Conflict_i
-=
-Conflict_i^{before}
--
-Conflict_i^{after}
-\]
-
-如果通信后分歧没有下降：
-
-\[
-P_{useless}=1
-\]
-
-否则：
-
-\[
-P_{useless}=0
-\]
-
----
-
-### 13.3 终止奖励
-
-当动作是 `STOP(i)` 时：
-
-\[
-r_{final}
-=
-\alpha Q_i
--
-\beta \frac{Cost_i}{B_c}
--
-\gamma \frac{Latency_i}{B_l}
--
-\lambda \frac{Msg_i}{B_m}
--
-\xi Violation_i
-\]
-
----
-
-### 13.4 试卷级奖励
-
-整张试卷 \(P\) 的最终奖励：
-
-\[
-R(P)
-=
-\frac{1}{N}
-\sum_{i=1}^{N}
-\alpha Q_i
--
-\beta \frac{Cost(P)}{B_c}
--
-\gamma \frac{Makespan(P)}{B_l}
--
-\lambda \frac{Messages(P)}{B_m}
--
-\xi Violation(P)
-\]
-
-其中：
-
-- \(Cost(P)\)：整张试卷总成本；
-- \(Makespan(P)\)：整张试卷完成时间；
-- \(Messages(P)\)：整张试卷 A2A 通信数；
-- \(Violation(P)\)：是否超出预算。
-
----
-
-## 14. 离线轨迹构建
-
-### 14.1 Agent 缓存轨迹来源
-
-对每道题缓存所有 Agent 输出后，自动构造多条候选轨迹。
-
-基础轨迹：
-
-```text
-T1: ROUTE_CHEAP → STOP
-T2: ROUTE_MID → STOP
-T3: ROUTE_STRONG → STOP
-T4: ROUTE_CHEAP → VERIFY → STOP
-T5: ROUTE_CHEAP → A2A_ASK → STOP
-T6: ROUTE_CHEAP → A2A_ASK → ARBITRATE → STOP
-T7: ROUTE_MID → A2A_ASK → ARBITRATE → STOP
-T8: ROUTE_CHEAP → VERIFY → A2A_ASK → ARBITRATE → STOP
-```
-
----
-
-### 14.2 边界轨迹
-
-加入两类边界轨迹：
-
-```text
-Always-Cheap Trajectory
-Always-Strong Trajectory
-```
-
-作用：
-
-- Always-Cheap 提供成本下界；
-- Always-Strong 提供质量上界；
-- 中间轨迹帮助 Router 学会何时升级、何时通信、何时仲裁。
-
-Budget-Aware Agentic Routing 提出了利用 always-small 和 always-large 这类 boundary policies 构造难度分类与训练信号的思想；本文将其迁移为自动阅卷中的成本边界轨迹构造方式。([arxiv.org](https://arxiv.org/abs/2602.21227?utm_source=chatgpt.com))
-
----
-
-### 14.3 Hindsight Budget Relabeling
-
-对每条轨迹生成多个预算版本：
-
-```text
-原始轨迹 cost = 0.42
-
-重标注：
-B = 0.30 → violation = 1
-B = 0.50 → violation = 0
-B = 0.80 → violation = 0
-```
-
-通过 Hindsight Budget Relabeling，Router 可以学习：
-
-```text
-预算紧张时减少通信和仲裁；
-预算宽松时允许验证和强模型调用；
-预算快耗尽时及时 STOP；
-高风险题应保留预算给 StrongAgent 或 ArbitratorAgent。
-```
-
-SeqRoute 中的 Hindsight Budget Relabeling 通过对历史轨迹施加不同假设预算扩展离线训练数据，并提升预算泛化能力；本文沿用该思想，但将任务从多轮 LLM routing 改为试卷级自动阅卷路由。([arxiv.org](https://arxiv.org/abs/2605.25424?utm_source=chatgpt.com))
-
----
-
-## 15. Cost-QWK Curve 设计
-
-### 15.1 成本点生成方式
-
-不同成本点不通过改变预算，而是通过改变奖励函数中的成本惩罚系数 \(\beta\) 得到。
-
-设置：
-
-\[
-\beta \in \{0.05,0.1,0.2,0.4,0.6,0.8,1.0\}
-\]
-
-含义：
-
-```text
-β 小：更重视评分质量，允许更多 StrongAgent、A2A_ASK 和 ARBITRATE。
-β 大：更重视成本控制，更倾向 CheapAgent 和提前 STOP。
-```
-
----
-
-### 15.2 曲线设置
-
-横轴：
-
-```text
-Cost per Paper
-```
-
-纵轴：
-
-```text
-QWK
-```
-
-比较方法：
-
-```text
-Static Difficulty Router
-CP-Router-Grade
-SeqRoute-Grade
-A2A-DyGrade-RL
-```
-
-希望观察到：
-
-```text
-1. 同等成本下，A2A-DyGrade-RL 的 QWK 更高；
-2. 同等 QWK 下，A2A-DyGrade-RL 的成本更低；
-3. A2A-DyGrade-RL 更接近 Cost-QWK Pareto Frontier；
-4. 高成本区域中，A2A 通信和仲裁继续带来收益；
-5. 低成本区域中，Router 能自动减少通信和强模型调用。
-```
-
----
-
-## 16. Baseline 设计
-
-本文不训练或复现自动评分单模型 SOTA，因为本文研究对象不是评分模型本身，而是冻结 Agent 池上的多 Agent 动态路由策略。为回答“为什么不用一个模型”，实验仍比较 `Cheap-only`、`Strong-only`、`single fixed best Agent` 和静态阈值升级，但这些 baseline 与本文方法共享同一冻结 Agent cache。
-
-### 16.1 Baseline 列表
-
-| 方法 | 类型 | 说明 |
+| 指标 | 正式定义 | 主/辅 |
 |---|---|---|
-| Cheap-only | 模型 baseline | 所有题都用 CheapAgent |
-| Strong-only | 模型 baseline | 所有题都用 StrongAgent |
-| Static Difficulty Router | 静态路由 baseline | Easy→Cheap，Medium→Mid，Hard→Strong |
-| CP-Router-Grade | 他人方法改造 baseline | 基于不确定性决定是否升级强模型 |
-| SeqRoute-Grade | 他人方法改造 baseline | 预算感知 CQL 路由，但不使用 A2A 与 Agent-Item Graph |
-| A2A-DyGrade-RL | 本文方法 | CAG-CQL Router |
+| `Quality Feasible` | 第16.3节四个单侧95%配对 Bootstrap 边界全部通过 | 主 |
+| `Severe Error Rate` | `Gate Error > 0.25`，分别按 dataset 报告并取最坏数据集 | 主 |
+| `UnsafeStopRisk` | `STOP` 后发生 Severe Error的数量 / 全部 `STOP` 数量 | 主 |
+| `Macro-NMAE` | 三个 dataset NMAE 的不加权平均，NMAE 使用 Gate Error | 主 |
+| `Macro-QWK` | 固定11档 dataset QWK 的不加权平均 | 主 |
+| `Extreme Error Rate` | `Gate Error >= 0.50` | 补充敏感性 |
+| `Micro-NMAE` | 全部 Item Gate Error 的直接平均 | 补充 |
+| `Unsafe Stop / All Items` | 不安全 STOP 数量 / 全部 Item | 补充 |
+| `Stop Coverage` | STOP 数量 / 全部 Item | 必报诊断 |
+| `Deferral Rate` | Deferral 数量 / 全部 Item | 必报诊断 |
+| MAE/RMSE/Within-1 | 原始尺度补充指标 | 补充 |
 
-CP-Router 是一种训练无关、模型无关的不确定性感知路由框架，它使用 conformal prediction 和 entropy 信息在普通 LLM 与强推理模型之间动态选择，以减少 token 使用并保持性能；本文将其改造为自动阅卷中的不确定性升级 baseline。([arxiv.org](https://arxiv.org/abs/2505.19970?utm_source=chatgpt.com)) SeqRoute 将 LLM routing 形式化为有限时域 MDP，并使用 CQL 进行离线强化学习，同时将剩余预算纳入状态空间；本文将其改造为预算感知阅卷路由 baseline，但去掉 A2A 通信、Agent-Item Graph 和通信历史编码，以突出本文方法差异。([arxiv.org](https://arxiv.org/abs/2605.25424?utm_source=chatgpt.com))
+Deferral、预算耗尽后未安全完成、非法或缺失最终分数均以 `Gate Error = 1` 进入 Severe Error 和 NMAE。`STOP count = 0` 时 `UnsafeStopRisk = NA` 且质量不可行。
 
----
+### 22.2 QWK Readiness
 
-## 17. 消融实验设计
-
-最终设置 5 个消融版本。
-
-| 消融版本 | 去掉内容 | 验证目的 |
-|---|---|---|
-| w/o A2A Communication | 去掉 `VERIFY`、`A2A_ASK`、`ARBITRATE` | 验证 A2A 通信是否有效 |
-| w/o Budget State | 去掉剩余 cost、latency、calls、messages | 验证预算状态是否必要 |
-| w/o Difficulty State | 去掉题目难度特征 | 验证难度建模是否有效 |
-| w/o Agent Capability State | 去掉 Agent 能力画像，只保留 Agent ID | 验证 Agent 能力建模是否有效 |
-| w/o HBR | 去掉 Hindsight Budget Relabeling | 验证预算重标注是否有效 |
-
-不进行强化学习算法对比，不设置 BC、DT、普通 CQL 横向比较。本文只保留一个主算法：**CAG-CQL**。
-
----
-
-## 18. 评价指标
-
-### 18.1 评分质量指标
-
-| 指标 | 含义 |
-|---|---|
-| QWK | 自动评分主指标 |
-| MAE | 平均绝对误差 |
-| RMSE | 均方根误差 |
-| Within-1 Accuracy | 预测分与 gold score 相差不超过 1 的比例 |
-
-主表主要报告 QWK 和 MAE。
-
----
-
-### 18.2 成本与效率指标
-
-| 指标 | 含义 |
-|---|---|
-| Cost per Paper | 单张试卷平均成本 |
-| Paper Latency | 单张试卷完成时间 |
-| Token Usage | 平均 token 消耗 |
-| Agent Calls | 平均 Agent 调用次数 |
-
----
-
-### 18.3 A2A 通信指标
-
-| 指标 | 含义 |
-|---|---|
-| A2A Messages | 平均通信次数 |
-| Useful Communication Rate | 通信后分歧下降的比例 |
-| Disagreement Reduction | 通信前后分歧下降幅度 |
-| Arbitration Rate | 触发仲裁比例 |
-
----
-
-### 18.4 预算指标
-
-| 指标 | 含义 |
-|---|---|
-| Budget Violation Rate | 超预算比例 |
-| Cost-QWK Curve | 成本—质量折中曲线 |
-| Pareto Efficiency | 是否接近最优成本—质量前沿 |
-
----
-
-## 19. 实验研究问题
-
-### RQ1：A2A-DyGrade-RL 是否优于简单模型与静态路由？
-
-比较：
+每个 dataset 的 QWK 报告必须同时给出：
 
 ```text
-Cheap-only
-Strong-only
-Static Difficulty Router
-A2A-DyGrade-RL
+valid_completed_n
+gold_nonempty_bin_count
+expected_weighted_disagreement
+fixed_label_set = 0..10
+qwk_defined
+readiness_failure_reason
 ```
 
-指标：
+要求 `valid_completed_n >= 100`、`gold_nonempty_bin_count >= 2`、expected weighted disagreement > 0。任一数据集 QWK 未定义时，不计算可用于质量门的 Macro-QWK，候选状态为 readiness failure。
+
+### 22.3 资源指标
+
+- Cost per Paper/Item；
+- Cumulative Elapsed Time per Paper；
+- Token Usage；
+- Agent Calls per Paper/Item；
+- Strong/Evidence/Arbitrator Call Rate；
+- A2A Exchanges per Paper/Item；
+- Budget Violation；
+- Budget Exhaustion。
+
+Dev 自动选择使用 `Cost/Paper`、`Elapsed Time/Paper`、`Agent Calls/Paper`、`A2A Exchanges/Paper` 的确定性点估计，且只在质量可行候选中比较。
+
+### 22.4 路由过程指标
+
+- 平均路径长度；
+- 路径类型分布；
+- 有效通信率；
+- 分歧降低率；
+- 追加调用边际收益；
+- 不同预算下质量可行率；
+- 各动作、各 Agent 和各 Item 的预算分配分布。
+
+### 22.5 Paper 级配对 Bootstrap 报告
+
+固定参数：
+
+```yaml
+unit: paper
+paired: true
+replicates: 5000
+confidence_level: 0.95
+sidedness: one_sided
+noninferiority_margin: 0
+seed: 20260729
+```
+
+对每个 `split × budget_id × candidate × reference` 必须保存点估计、5000次重采样差值、单侧边界、readiness 和最终状态。正式四项门为：
 
 ```text
+UCB95(max_dataset_delta_severe) <= 0
+UCB95(max_dataset_delta_unsafe_stop) <= 0
+UCB95(delta_macro_nmae) <= 0
+LCB95(delta_macro_qwk) >= 0
+```
+
+置信区间跨0、任一指标未定义或 Bootstrap 无法完成时，统一不得通过质量门；不得用“差异不显著”代替“证明不劣”。
+
+## 23. 预算档位与质量—资源前沿
+
+正式实验使用自动生成的：
+
+```text
+Tight
+Medium
+Loose
+```
+
+每个档位同时包含四维资源上限。所有方法在相同档位比较。
+
+仍可绘制 Cost-QWK、Cost-NMAE 等曲线，但其作用是描述不同方法的表现，不能通过手工改变 \(\beta\) 选择主模型。
+
+图中应：
+
+- 标记 `Quality Feasible`；
+- 将质量不合格点显示为不可行；
+- 只对质量可行点计算资源节省；
+- 同时报告 Severe Error 和 Unsafe Stop。
+
+更准确名称为：
+
+> **质量可行资源前沿（Quality-Feasible Resource Frontier）**。
+
+---
+
+## 24. 研究问题
+
+### RQ1：质量门通过后能否节约资源？
+
+在不降低 QWK、不增加 NMAE、严重错分和不安全停止的前提下，主方法能否降低成本、累计延迟、调用和通信？
+
+### RQ2：为什么需要强化学习？
+
+在相同 hidden cache 和预算下，CAG-CQL 是否优于分类器、自动阈值、Bandit、greedy 和 knapsack？
+
+### RQ3：Stop-Risk Head 是否必要？
+
+风险头是否降低不安全停止和严重错分，同时保留 Router 对后续动作和任务顺序的决策价值？
+
+### RQ4：CAG、能力画像、预算状态和 A2A 是否有效？
+
+各组件对质量可行率、资源和路径行为有什么独立贡献？
+
+### RQ5：自动校准和失败保留是否提高可信度？
+
+重复运行是否得到同一参考、预算、阈值和 checkpoint；失败时是否能返回明确失败而不是人为放宽规则？
+
+---
+
+## 25. 实验表格
+
+### 25.1 质量门与资源主表
+
+```text
+Method
+Budget ID
+Budget Quality Feasible
+Package Quality Feasible
+Quality Gate Status
+Worst-Dataset Severe Error
+UCB95(max_dataset_delta_severe)
+Worst-Dataset Unsafe Stop
+UCB95(max_dataset_delta_unsafe_stop)
+Macro-NMAE
+UCB95(delta_macro_nmae)
+Macro-QWK
+LCB95(delta_macro_qwk)
+Stop Coverage
+Deferral Rate
+Cost/Paper
+Elapsed Time/Paper
+Agent Calls/Paper
+A2A Exchanges/Paper
+Budget Exhaustion
+```
+
+主表先展示预算档位质量门、Package 级全预算可行性和统计边界，再展示资源。主方法只有在 `Package Quality Feasible = Yes` 时才允许形成总体资源优化结论；分预算资源差异仍完整报告。
+
+### 25.2 分数据集质量与 Readiness 表
+
+```text
+Method
+Budget ID
+Dataset
+N All Items
+N Valid Completed
+Severe Error
+Extreme Error
+Unsafe Stop
+Unsafe Stop / All Items
+Stop Coverage
+Deferral Rate
+NMAE
 QWK
-MAE
-Cost per Paper
-Paper Latency
+Gold Nonempty Bins
+Expected Weighted Disagreement
+QWK Defined
+Readiness Failure Reason
 ```
 
----
-
-### RQ2：A2A-DyGrade-RL 是否优于已有 routing 方法改造版？
-
-比较：
+### 25.3 消融表
 
 ```text
-CP-Router-Grade
-SeqRoute-Grade
-A2A-DyGrade-RL
+Variant
+Budget ID
+Quality Feasible
+Quality Gate Status
+Worst-Dataset Severe Error
+Worst-Dataset Unsafe Stop
+Macro-NMAE
+Macro-QWK
+Cost/Paper
+Elapsed Time/Paper
+Agent Calls/Paper
+A2A Exchanges/Paper
 ```
 
-指标：
+### 25.4 Dev 自动选择审计表
 
 ```text
-QWK
-MAE
-Cost per Paper
-Budget Violation Rate
+Policy Package ID
+All-Budgets Quality Feasible
+Tight Gate Status
+Medium Gate Status
+Loose Gate Status
+Mean-Budget Cost/Paper
+Mean-Budget Elapsed Time/Paper
+Mean-Budget Agent Calls/Paper
+Mean-Budget A2A Exchanges/Paper
+Worst-(Budget,Dataset) Severe Error
+Worst-(Budget,Dataset) Unsafe Stop
+Mean-Budget Macro-NMAE
+Mean-Budget Macro-QWK
+Dev Rank
+Selected
+Rejection Reason
+Quality Protocol Hash
+Config Hash
 ```
 
----
-
-### RQ3：核心模块是否有效？
-
-比较：
+### 25.5 配对 Bootstrap 明细表
 
 ```text
-Full CAG-CQL
-w/o A2A
-w/o Budget State
-w/o Difficulty State
-w/o Agent Capability State
-w/o HBR
+Split
+Budget ID
+Candidate
+Reference
+Metric
+Point Delta
+One-Sided Bound Type
+One-Sided 95% Bound
+Pass
+Replicates
+Seed
+Readiness Status
+Failure Reason
 ```
 
-指标：
+### 25.6 失败注册表
 
 ```text
-QWK
-MAE
-Cost
-Latency
-A2A Messages
-Budget Violation Rate
+run_id
+stage
+split
+budget_id
+failure_type
+policy/checkpoint
+reason
+quality_metrics
+confidence_bounds
+resource_metrics
+protocol_hash
+retained_artifact
 ```
 
----
+## 26. 运行与复现
 
-### RQ4：A2A-DyGrade-RL 是否形成更优 Cost-QWK Curve？
-
-比较：
+每次运行必须使用唯一 `run_id`：
 
 ```text
-Static Difficulty Router
-CP-Router-Grade
-SeqRoute-Grade
-A2A-DyGrade-RL
-```
-
-不同成本点由成本惩罚系数 \(\beta\) 控制：
-
-```text
-β = 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 1.0
-```
-
-指标：
-
-```text
-Cost per Paper
-QWK
-Pareto frontier
-```
-
----
-
-## 20. 实验表格设计
-
-### 20.1 主实验表
-
-| Method | QWK ↑ | MAE ↓ | Cost ↓ | Paper Latency ↓ | A2A Msg ↓ | Budget Violation ↓ |
-|---|---:|---:|---:|---:|---:|---:|
-| Cheap-only |  |  |  |  |  |  |
-| Strong-only |  |  |  |  |  |  |
-| Static Difficulty Router |  |  |  |  |  |  |
-| CP-Router-Grade |  |  |  |  |  |  |
-| SeqRoute-Grade |  |  |  |  |  |  |
-| A2A-DyGrade-RL |  |  |  |  |  |  |
-
----
-
-### 20.2 消融实验表
-
-| Method | QWK ↑ | MAE ↓ | Cost ↓ | Latency ↓ | Msg ↓ | Violation ↓ |
-|---|---:|---:|---:|---:|---:|---:|
-| Full CAG-CQL |  |  |  |  |  |  |
-| w/o A2A |  |  |  |  |  |  |
-| w/o Budget State |  |  |  |  |  |  |
-| w/o Difficulty State |  |  |  |  |  |  |
-| w/o Agent Capability State |  |  |  |  |  |  |
-| w/o HBR |  |  |  |  |  |  |
-
----
-
-### 20.3 Cost-QWK 曲线
-
-图设置：
-
-```text
-x-axis: Cost per Paper
-y-axis: QWK
-methods:
-  - Static Difficulty Router
-  - CP-Router-Grade
-  - SeqRoute-Grade
-  - A2A-DyGrade-RL
-```
-
----
-
-## 21. 整体框架路径
-
-### 21.1 离线训练阶段
-
-```text
-公开数据集
-   ↓
-数据清洗与统一格式化
-   ↓
-构造 item-level 数据
-   ↓
-自动组合 paper-level 试卷
-   ↓
-运行所有 Agent 并缓存输出
-   ↓
-构建题目难度标签
-   ↓
-构建 Agent Capability Table
-   ↓
-构建 A2A 通信轨迹
-   ↓
-Hindsight Budget Relabeling
-   ↓
-训练 CAG-CQL Router
-```
-
----
-
-### 21.2 在线推理阶段
-
-```text
-输入已切分试卷
-   ↓
-Item Encoder 编码每道题
-   ↓
-Agent Capability Encoder 编码 Agent 能力
-   ↓
-Budget Encoder 编码剩余预算
-   ↓
-构建 Agent-Item Routing Graph
-   ↓
-A2A History Encoder 编码通信历史
-   ↓
-CAG-CQL Router 选择动作
-   ↓
-执行 ROUTE / VERIFY / A2A_ASK / ARBITRATE / STOP
-   ↓
-更新状态与预算
-   ↓
-直到所有题目完成
-   ↓
-输出整张试卷评分、成本、时延、通信日志
-```
-
----
-
-## 22. 项目文件规划
-
-项目名：
-
-```text
-A2A-DyGrade/
-```
-
-完整目录：
-
-```text
-A2A-DyGrade/
-│
-├── README.md
-├── requirements.txt
-├── pyproject.toml
-├── .env.example
-│
+outputs/runs/<run_id>/
 ├── configs/
-│   ├── dataset.yaml
-│   ├── agents.yaml
-│   ├── router.yaml
-│   ├── cag_cql.yaml
-│   └── experiment.yaml
-│
-├── data/
-│   ├── raw/
-│   │   ├── dress/
-│   │   ├── asap_sas/
-│   │   └── sas_bench/
-│   │
-│   ├── processed/
-│   │   ├── items_train.jsonl
-│   │   ├── items_dev.jsonl
-│   │   ├── items_test.jsonl
-│   │   ├── papers_train.jsonl
-│   │   ├── papers_dev.jsonl
-│   │   ├── papers_test.jsonl
-│   │   └── difficulty_labels.jsonl
-│   │
-│   └── trajectories/
-│       ├── train_trajectories.jsonl
-│       ├── dev_trajectories.jsonl
-│       ├── test_trajectories.jsonl
-│       └── hbr_trajectories.jsonl
-│
-├── prompts/
-│   ├── cheap_scorer.txt
-│   ├── mid_scorer.txt
-│   ├── strong_scorer.txt
-│   ├── evidence_agent.txt
-│   └── arbitrator_agent.txt
-│
-├── src/
-│   ├── datasets/
-│   │   ├── load_dress.py
-│   │   ├── load_asap_sas.py
-│   │   ├── load_sas_bench.py
-│   │   ├── normalize.py
-│   │   ├── build_items.py
-│   │   ├── build_papers.py
-│   │   └── split.py
-│   │
-│   ├── agents/
-│   │   ├── base_agent.py
-│   │   ├── cheap_agent.py
-│   │   ├── mid_agent.py
-│   │   ├── strong_agent.py
-│   │   ├── evidence_agent.py
-│   │   ├── arbitrator_agent.py
-│   │   └── agent_registry.py
-│   │
-│   ├── a2a/
-│   │   ├── agent_card.py
-│   │   ├── message_schema.py
-│   │   ├── message_bus.py
-│   │   ├── message_encoder.py
-│   │   └── audit_log.py
-│   │
-│   ├── graph/
-│   │   ├── graph_builder.py
-│   │   ├── hetero_graph.py
-│   │   ├── graph_transformer.py
-│   │   └── graph_attention.py
-│   │
-│   ├── router/
-│   │   ├── state.py
-│   │   ├── action.py
-│   │   ├── action_mask.py
-│   │   ├── reward.py
-│   │   ├── item_encoder.py
-│   │   ├── agent_encoder.py
-│   │   ├── budget_encoder.py
-│   │   ├── a2a_history_encoder.py
-│   │   ├── routing_graph_encoder.py
-│   │   ├── q_network.py
-│   │   ├── target_network.py
-│   │   └── cag_cql_policy.py
-│   │
-│   ├── rl/
-│   │   ├── replay_buffer.py
-│   │   ├── trajectory_builder.py
-│   │   ├── boundary_trajectory_builder.py
-│   │   ├── hindsight_budget_relabeling.py
-│   │   ├── cql_loss.py
-│   │   ├── train_cag_cql.py
-│   │   └── evaluate_policy.py
-│   │
-│   ├── baselines/
-│   │   ├── cheap_only.py
-│   │   ├── strong_only.py
-│   │   ├── static_difficulty_router.py
-│   │   ├── cp_router_grade.py
-│   │   └── seqroute_grade.py
-│   │
-│   ├── scheduler/
-│   │   ├── parallel_scheduler.py
-│   │   ├── budget_manager.py
-│   │   └── task_queue.py
-│   │
-│   ├── evaluation/
-│   │   ├── metrics_quality.py
-│   │   ├── metrics_cost.py
-│   │   ├── metrics_latency.py
-│   │   ├── metrics_budget.py
-│   │   ├── metrics_a2a.py
-│   │   ├── metrics_routing.py
-│   │   └── plot_cost_qwk_curve.py
-│   │
-│   └── utils/
-│       ├── io.py
-│       ├── logging.py
-│       ├── llm_client.py
-│       ├── json_utils.py
-│       └── seed.py
-│
-├── scripts/
-│   ├── 01_build_items.py
-│   ├── 02_build_papers.py
-│   ├── 03_run_agent_cache.py
-│   ├── 04_build_difficulty_labels.py
-│   ├── 05_build_trajectories.py
-│   ├── 06_train_cag_cql.py
-│   ├── 07_eval_baselines.py
-│   ├── 08_eval_ablation.py
-│   └── 09_plot_cost_qwk_curve.py
-│
-├── outputs/
-│   ├── agent_cache/
-│   ├── profiles/
-│   │   └── agent_capability_table.csv
-│   ├── checkpoints/
-│   │   └── cag_cql/
-│   ├── predictions/
-│   ├── logs/
-│   │   ├── router_logs.jsonl
-│   │   ├── a2a_logs.jsonl
-│   │   └── budget_logs.jsonl
-│   └── reports/
-│       ├── main_results.csv
-│       ├── ablation_results.csv
-│       ├── cost_qwk_curve.csv
-│       └── case_study.md
-│
-└── tests/
-    ├── test_dataset.py
-    ├── test_agents.py
-    ├── test_a2a.py
-    ├── test_graph_encoder.py
-    ├── test_action_mask.py
-    ├── test_reward.py
-    └── test_cag_cql.py
+├── logs/
+├── predictions/
+├── checkpoints/
+├── reports/
+└── figures/
 ```
 
----
+内部重建数据的规范文件按仓库规则写入 `data/processed/`；每个正式 run 必须在自身目录保存对应配置快照、manifest/hash 和审计报告，使本次训练、校准、Dev 选择与 Test 评价能够准确回放。
 
-## 23. 实现顺序
+必须保存或快照：
 
-### 阶段 1：数据处理
+- resolved config，以及 Prompt/model/cache/data/code hashes；
+- 外部 split/paper manifest 指纹；
+- `internal_item_split_manifest.csv`；
+- `papers_train_fit.jsonl` 与 `papers_train_calibration.jsonl`；
+- `internal_paper_manifest.csv`、`leftover_items.csv` 与 `internal_split_audit.md`；
+- `quality_protocol.yaml` 的冻结快照与 `quality_protocol_manifest.json`；
+- `agent_capability_manifest.json`、`quality_reference_manifest.json` 与 `budget_calibration_manifest.json`；
+- `qwk_readiness.csv`、`risk_calibration_report.csv` 与 `calibration_package_manifest.jsonl`；
+- `quality_gate_bootstrap.csv`、`checkpoint_selection.csv` 与 `policy_freeze_manifest.json`；
+- `failure_registry.jsonl` 和 Test final-evaluation record。
+
+`calibration_package_manifest.jsonl` 每行只对应一个冻结 checkpoint，记录其 STOP 边界或 calibration failure 以及相关环境 hash，不得包含跨 checkpoint 最终排名；`checkpoint_selection.csv` 只能由 Dev selector 产生。
+
+`quality_protocol_manifest.json` 至少记录 Gate Error 规则、Severe/Extreme 阈值、Unsafe Stop 分母、QWK 分档与固定 labels、QWK readiness、Bootstrap 参数、Dev 选择顺序以及实现代码 hash。
+
+所有论文表格和图必须能够从保存的 predictions、logs、configs、external/internal manifests、Calibration Package 和 Bootstrap 产物重新计算；不得只保存最终均值或手工整理后的表格。
+
+## 27. 实施阶段
+
+### 阶段1：External Prepared Data（已完成）
+
+现有三个数据集、外部 `train/dev/test`、prepared Item、外部 Paper 与审计继续保持，不替换数据集，也不扩展当前主路由 Item 范围。
+
+### 阶段2：Agent Fixture Cache（已完成）
+
+Agent/cache 工程链路和 fixture smoke 已完成，但 fixture 不能进入论文正式结果。
+
+### 阶段3：V1.4 Internal Split、Paper Rebuild 与协议基础
+
+必须先完成以下顺序，之后才允许进入真实 Pilot：
 
 ```text
-1. 下载 DREsS、ASAP-SAS、SAS-Bench；
-2. 编写 loader；
-3. 统一成 items.jsonl；
-4. 自动构造 papers.jsonl；
-5. 完成 train/dev/test 划分。
+27,375条train主路由Item
+→ prompt/exact-answer/leakage connected-component原子分配
+→ train_fit/train_calibration两个Item池
+→ 两边分别重建固定5题strict Paper
+→ internal manifests、leftover与阻塞性audit
+→ quality protocol、QWK readiness与paired Bootstrap
+→ calibration/Dev职责隔离fixture smoke
 ```
 
----
+门禁要求旧 `paper_train_*` 直接分配次数为0，内部 Item/Prompt/Component/Paper 泄漏和 strict mix 违规均为0。
 
-### 阶段 2：Agent 缓存
+### 阶段4：真实 Agent Pilot
 
-```text
-1. 实现 CheapAgent、MidAgent、StrongAgent；
-2. 实现 EvidenceAgent、ArbitratorAgent；
-3. 对所有训练样本缓存 Agent 输出；
-4. 记录 score、confidence、cost、latency、token_usage。
-```
+经用户批准后，只从重建后的完整 strict `train_fit` Paper 中抽取约100个 Item（约20份5题 Paper）运行 Pilot，同时审核 Item 级质量/互补性和 Paper 级 cost、elapsed time、calls、exchanges。Pilot 只决定是否允许进入 Formal cache，不改变内部 split、正式质量协议或正式预算规则。
 
----
+### 阶段5：Formal Cache 与全局校准产物
 
-### 阶段 3：难度与能力建模
+Pilot 门禁通过后冻结 Formal Agent、Prompt、解析、成本定义和 context support catalog，再按 internal Item manifest 生成独立 `train_fit/train_calibration` cache，按外部 manifest 生成 Dev cache。仅用 `train_fit` 拟合能力画像主体；仅用重建后的 `train_calibration` Paper/cache 冻结画像支持度边界、质量参考和正式预算。此阶段尚无 Router checkpoint，因此不得提前宣称已完成 per-checkpoint STOP 校准。Test cache 继续推迟。
 
-```text
-1. 根据 Agent 误差和分歧自动生成 difficulty labels；
-2. 构建 Agent Capability Table；
-3. 分析不同 Agent 在不同题型和难度上的表现。
-```
+### 阶段6：Hidden Environment、轨迹与 Router 参数训练
 
----
+只使用重建后的 `train_fit` Paper 和 train_fit formal cache，实现 Action、Mask、State、A2A、hidden cache、trajectory、CAG-CQL、Stop-Risk Head 和 critics，构建 replay buffer 并训练预注册候选 checkpoint。`train_calibration/dev/test` 不进入梯度、target、early stopping 或 replay。
 
-### 阶段 4：离线轨迹构建
+### 阶段7：Per-Checkpoint Calibration 与 Dev 最终选择
 
-```text
-1. 构造基础评分轨迹；
-2. 构造 A2A 通信轨迹；
-3. 构造 Always-Cheap / Always-Strong 边界轨迹；
-4. 执行 Hindsight Budget Relabeling；
-5. 生成 replay buffer。
-```
+对阶段6产生的每个冻结 checkpoint，使用同一预注册程序在 `train_calibration` 上自动产生唯一 STOP 安全概率边界或 calibration failure，并组装 Calibration Package；calibration 不进行跨 checkpoint 排名。随后 Dev 只比较边界已冻结的完整 Package：在 Tight/Medium/Loose 各档执行 Paper 级配对 Bootstrap 质量门，任一档失败即淘汰整个 Package；仅在全预算质量可行候选中按跨预算等权资源词典序选择唯一 checkpoint，并生成 freeze manifest。
 
----
+### 阶段8：Test Final Evaluation
 
-### 阶段 5：CAG-CQL 训练
+所有组件冻结后才生成隔离 Test cache 并运行一次性最终评价。指标未定义、readiness 失败、置信区间跨0或质量门失败均如实保留并报告，不得返回 calibration 或 Dev 调整边界、指标或 checkpoint。
 
-```text
-1. 实现 Agent-Item Routing Graph Encoder；
-2. 实现 Transformer / GRU A2A History Encoder；
-3. 实现 Double Q Network；
-4. 实现 Target Network；
-5. 实现 Action Mask；
-6. 实现 Masked CQL Conservative Penalty；
-7. 训练 CAG-CQL Router。
-```
+## 28. 当前尚未冻结的决策
 
----
+以下工程细节必须在对应实现或真实 Pilot 前预注册，但不能根据 Dev/Test 结果决定：
 
-### 阶段 6：实验评估
+1. 真实 Cheap/Mid/Strong/Evidence/Arbitrator 模型与版本；
+2. 正式 Prompt、生成参数、解析规则和输出 JSON；
+3. connected-component 分配求解器、strict Paper builder 的确定性实现及并列处理细节；这些实现不得改变“component完整性优先、目标约80%/20%、两边分别重建”的冻结原则；
+4. Stop-Risk 概率校准算法、候选边界生成和覆盖率约束的具体实现；
+5. Formal calibration Paper 资源分位数与 Tight/Medium/Loose 预算生成的固定规则；
+6. 固定级联、完整多 Agent 工作流等参考候选的精确动作语义；
+7. 最小三头架构是否增加独立 Quality Critic；
+8. 资源指标数值精度、排序序列化和同值比较的工程实现。
 
-```text
-1. 运行 5 个 baseline；
-2. 运行 A2A-DyGrade-RL；
-3. 运行 5 个消融实验；
-4. 绘制 Cost-QWK Curve；
-5. 输出 case study。
-```
+以下内容已由 V1.4 正式冻结，不再属于未决项：
 
----
+- 继续使用已有三个数据集和当前27,375条 train 主路由 Item，不把另外663条未入 Paper Item扩入主实验；
+- 现有5,475份 train Paper不得直接拆为两个内部 split；
+- 先按 prompt/exact-answer/leakage传递连通分量拆 Item，再在 `train_fit/train_calibration` 内分别重建固定5题 strict Paper；
+- 内部拆分目标约80%/20%，但 component完整性、三数据集覆盖和 strict Paper可构造性优先于精确比例；
+- `train_fit` 训练参数、`train_calibration` 固定每个 checkpoint 的 STOP 边界和环境 Package、Dev 选择唯一 Package、Test 一次性评价；
+- `Gate Error` 与 Deferral/非法结果赋值为1；
+- `Severe Error > 0.25` 与 `Extreme Error >= 0.50`；
+- Unsafe Stop 主分母及 `STOP count = 0` 处理；
+- Macro-NMAE；
+- 固定0～10共11档 Macro-QWK 与 readiness 条件；
+- Paper 级配对 Bootstrap 的5000次、单侧95%、零非劣效界和种子 `20260729`；
+- 四项质量门边界，以及全预算质量可行后 Dev 跨预算资源词典序。
 
-## 24. 预期创新点
+所有尚未冻结内容必须写入配置、任务和 manifest，不能人工依据主实验结果调整。内部拆分实际比例、Paper数量和leftover数量属于确定性构建结果，不是看到 Router 结果后可以重新选择的超参数。
 
-### 创新点 1：试卷级多 Agent 动态路由建模
+## 29. 预期创新点
 
-不同于单题自动评分或单模型自动评分，本文将一张试卷建模为多个可并行处理的评分子任务，并在全局预算下动态选择 Agent、通信、仲裁和停止动作。
+### 创新点1：质量绝对优先的模拟试卷级共享资源调度
 
-### 创新点 2：Agent-Item Routing Graph Encoder
+将多题自动阅卷建模为质量不可被资源补偿的约束序列决策。
 
-本文显式构建题目节点、Agent 节点和预算节点之间的异构图，用于建模不同题型、不同难度与不同 Agent 能力之间的匹配关系。
+### 创新点2：逐步证据驱动的可变长度多 Agent 路径
 
-### 创新点 3：A2A History Encoder
+Router 在看不到未调用 Agent 输出的条件下，自主学习评分、核验、二评、仲裁和跨 Item 停止路径。
 
-本文将 Agent 间通信历史作为状态的一部分，使用 GRU 或 Transformer 编码通信序列，使 Router 能够学习通信是否有效、是否降低分歧、是否值得继续仲裁。
+### 创新点3：学习型 STOP 风险与职责隔离的自动校准
 
-### 创新点 4：动作掩码下的 CAG-CQL Router
+Stop-Risk Head 在 `train_fit` 学习不安全停止风险，每个冻结 checkpoint 只在独立 `train_calibration` Paper 上自动固定 STOP 安全概率边界；Dev 只选择完整固定 Package。Mid/Strong、核验、A2A、仲裁和下一 Item 仍由 Router 学习，不退化为人工阈值级联。
 
-本文在离线强化学习中引入动作掩码、Double Q Network、Target Network 和 Masked CQL Conservative Penalty，使 Router 在合法动作空间中学习稳定的预算感知路由策略。
+### 创新点4：CAG、通信、能力和预算的联合状态表示
 
-### 创新点 5：Cost-QWK Pareto Frontier 优化
+通过 CAG 编码已发生的 Item-Agent-Message 关系、能力先验和共享资源状态，并通过消融检验各组件贡献。
 
-本文不单纯追求最高 QWK，而是通过改变奖励函数中的成本惩罚系数 \(\beta\)，系统评估不同成本约束下的 QWK 表现，验证方法是否形成更优成本—质量折中。
+### 创新点5：不可手调且可审计的四阶段实验协议
 
----
+数据先按题目组 component 拆 Item并分别重建 Paper；参数学习、边界校准、Dev 选择和 Test 评价严格分离。质量参考、风险边界、预算档位和 checkpoint 均由预注册程序自动产生或选择，所有失败结果完整保留。
 
-## 25. 最终论文方法一句话
+## 30. 最终论文方法一句话
 
-本文提出 **A2A-DyGrade-RL**，一种面向自动阅卷的通信感知多智能体动态路由框架。其核心 **CAG-CQL Router** 将试卷级自动阅卷建模为预算约束下的离线强化学习问题，通过 Agent-Item Routing Graph Encoder 建模题目与 Agent 的能力匹配关系，通过 GRU / Transformer A2A History Encoder 编码 Agent 间通信轨迹，并结合动作掩码、Double Q Network、Target Network、CQL Conservative Penalty 和 Hindsight Budget Relabeling，学习在不同成本惩罚系数下动态选择低成本评分、强模型评分、证据验证、A2A 第二意见、仲裁或停止，从而优化自动阅卷中的 Cost-QWK Pareto Frontier。
+> **本文提出 A2A-DyGrade-RL，一种面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法。现有 train 主路由作答先按 prompt/exact-answer/leakage 传递连通分量确定性划分为 `train_fit` 与 `train_calibration`，再在两个内部 split 中分别重建固定5题 strict 模拟试卷，禁止直接切分已有 train Paper。系统冻结评分 Agent，不训练评分模型；CAG-CQL Router 仅在 `train_fit` 学习下一 Item、评分、核验、二评、A2A、仲裁和停止等长期序列决策，每个冻结 checkpoint 只在 `train_calibration` 自动固定 STOP 安全概率边界并组装完整 Package，Dev 才对边界冻结 Package 执行全预算零容忍配对统计质量门，并在质量可行候选中按跨预算等权资源消耗选择唯一 checkpoint。完成选择后，模型、Prompt、边界、预算、质量门和 checkpoint 全部冻结，Test 仅用于一次性最终评价。**
