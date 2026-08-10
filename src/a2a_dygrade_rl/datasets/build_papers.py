@@ -66,9 +66,9 @@ def build_papers(config_path: str | Path, input_dir: str | Path, output_dir: str
     budgets = paper_config.get("budgets", {})
     budget = PaperBudget(
         max_cost=float(budgets.get("max_cost", 0.2)),
-        max_latency=float(budgets.get("max_latency", 30.0)),
+        max_elapsed_time=float(budgets.get("max_elapsed_time", budgets.get("max_latency", 30.0))),
         max_agent_calls=int(budgets.get("max_agent_calls", 12)),
-        max_a2a_messages=int(budgets.get("max_a2a_messages", 6)),
+        max_a2a_exchanges=int(budgets.get("max_a2a_exchanges", budgets.get("max_a2a_messages", 6))),
     )
     paths: dict[str, Path] = {}
     manifest_rows: list[dict] = []

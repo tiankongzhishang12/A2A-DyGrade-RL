@@ -1,18 +1,20 @@
-# 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
+﻿# 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
 
 **分支**：`001-a2a-dygrade-rl`
 **日期**：2026-07-29
 **规格**：[spec.md](./spec.md)
-**依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.2、`AGENTS.md` 1.4.0
+**依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.3、`AGENTS.md` 1.4.0
 
 ---
 
 ## 1. 摘要
 
-本计划继续研究“面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法”，继承 V1.3 正式质量协议，并执行 V1.4 两项新增决定：
+本计划继续研究“面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法”，继承 V1.3 正式质量协议，并执行 V1.4 四项已确认决定：
 
 1. **最终职责分离**：`train_fit` 只训练参数；`train_calibration` 只为每个冻结 checkpoint 校准 STOP 安全概率边界、冻结参考/预算并组装候选 Package；Dev 才比较完整 Package 并选择唯一 Router；Test 只最终评价。
 2. **内部 Paper 重建**：不直接拆现有5,475份 train Paper；从当前27,375条 train 主路由 Item 出发，先按 prompt/leakage connected component 分配到 `train_fit/train_calibration`，再分别重建固定5题 strict Paper。
+3. **Quality Champion 保护**：Dev 先执行固定参考准入门，再只按质量确定冠军，其他候选证明不劣于冠军后才能比较资源。
+4. **Baseline 精简**：删除 Fixed Cascade、Per-item Myopic Router 和 Greedy Marginal Utility，保留固定 Agent、完整多 Agent、自动阈值、静态分类器、Contextual Bandit 和 Top-k/Knapsack。
 
 核心流程：
 
@@ -22,14 +24,14 @@ external train Item scope
 → separate train_fit/train_calibration strict Paper rebuild
 → train_fit parameter learning
 → train_calibration per-checkpoint STOP boundary + environment/package freeze
-→ Dev fixed-package quality gate + cross-budget resource selection
+→ Dev fixed-reference admission + Quality Champion protection + cross-budget resource selection
 → unique Policy Package freeze
 → one-shot Test
 ```
 
 主方法的 Mid/Strong、VERIFY、A2A、ARBITRATE 和下一 Item 选择由 Router 学习，不在 calibration 额外配置一组升级阈值。任何 calibration 梯度训练、replay consumption、跨 checkpoint 最终排名，或 Dev 边界移动都属于阻塞性违规。
 
-V1.3 的 Gate Error、Severe/Extreme、Unsafe Stop、Macro-NMAE、固定11档 Macro-QWK、QWK readiness、Paper 级配对 Bootstrap、全预算质量可行后资源优先选择继续保持不变。
+V1.3 的 Gate Error、Severe/Extreme、Unsafe Stop、Macro-NMAE、固定11档 Macro-QWK、QWK readiness 和 Paper 级配对 Bootstrap 保持不变；Dev 选择改为“固定参考准入门 -> Quality Champion 质量保护门 -> 资源词典序”。
 
 ## 2. 当前执行状态
 
@@ -42,19 +44,16 @@ V1.3 的 Gate Error、Severe/Extreme、Unsafe Stop、Macro-NMAE、固定11档 Ma
 - 外部主 Paper 共引用36,185条 Item：train 27,375、dev 980、test 7,830。
 - 已完成 train Paper—prompt group 图审计：5,475份 train Paper 形成1个覆盖100%的连通分量，证明不能直接按 Paper 拆 `train_fit/train_calibration`。
 - Agent cache schema、五类 Agent wrapper、FixtureClient、cache writer、断点续跑、模式隔离、difficulty/capability fixture 流程已实现。
-- `fixture_smoke_001` 已通过；现有测试套件最近一次检查为40 passed。
+- 历史 `fixture_smoke_001` 已通过；V1.4 完整 Fixture Smoke 最新权威 run 为 `fixture_smoke_v14_20260729_005`，已通过路径隔离、Formal 拒绝探针、STOP 边界应用、预算硬门、A2A 计数、完整确定性与逐文件 inventory 门禁；最终全量命令为 `135 passed in 191.29s`，后续仍以当次命令输出为准。
 - V1.3 质量协议和 V1.4 最终职责/内部重建决定已在设计、规格、计划与任务层确定。
 
 ### 2.2 尚未完成
 
-- V1.4 internal prompt-group allocation、`internal_item_split_manifest.csv` 和内部 leakage audit 尚未实现。
-- `papers_train_fit.jsonl`、`papers_train_calibration.jsonl` 与 `internal_paper_manifest.csv` 尚未生成。
 - 正式真实 Agent 模型与 Prompt 尚未冻结；重建 train_fit Paper 上约100 Item/20 Paper Pilot 尚未运行。
+- CLIProxy 已暴露 `gpt-5.6-luna/terra/sol` 模型目录；身份探针中 Luna/Terra 已通过，Sol 先后出现 `HTTP 408 stream closed` 与 `HTTP 503 auth_unavailable`，因此100 Item调用按门禁暂停，待 Sol 上游认证/配额恢复后重跑 T052B0。
 - Formal `train_fit/train_calibration/dev/test` Agent cache 尚未生成。
-- `quality_protocol.yaml`、Gate Error/Severe/Unsafe Stop/Macro-NMAE/固定11档 QWK、QWK readiness 和 Paper 级配对 Bootstrap 尚未实现。
-- 质量参考、预算、能力支持度和 per-checkpoint STOP 边界自动校准尚未实现。
-- Calibration Package、Dev-only selector 和 freeze manifest 尚未实现。
-- 隐藏 cache 环境、train_fit-only 轨迹/replay、质量约束 Router、强 baseline、消融和一次性 Test 门禁尚未实现。
+- 隐藏 cache 环境、train_fit-only 轨迹/replay、质量约束 Router、强 baseline、消融和正式一次性 Test 门禁尚未实现。
+- Fixture Smoke 已实现的质量协议、参考/预算/支持度/STOP 校准、Package 与 Dev selector 只证明职责链和测试契约连通，不能替代正式 Router 候选与真实 Agent 评价。
 
 ### 2.3 当前门禁
 
@@ -72,8 +71,8 @@ V1.3 正式质量指标、统计门和跨预算 Dev 排序仍冻结，不允许�
 
 | 编号 | 研究问题 | 主要证据 |
 |---|---|---|
-| RQ1 | 在零容忍统计质量门通过后，动态路由能否减少资源？ | 四项配对 Bootstrap 边界、质量可行主表、Tight/Medium/Loose 资源结果 |
-| RQ2 | 共享预算和多步反馈是否使强化学习优于分类器、Bandit、greedy 和 knapsack？ | 强 baseline 对照、路径与机会成本分析 |
+| RQ1 | 在通过固定参考准入门且不劣于 Quality Champion 的前提下，动态路由能否减少资源？ | 两层四项配对 Bootstrap 边界、质量保护主表、Tight/Medium/Loose 资源结果 |
+| RQ2 | 共享预算和多步反馈是否使强化学习优于分类器、Bandit 和 knapsack？ | 强 baseline 对照、路径与机会成本分析 |
 | RQ3 | Stop-Risk Head、CAG、能力画像、预算状态和 A2A 是否有独立贡献？ | 消融、Severe/Unsafe Stop、Macro-NMAE/QWK、通信收益 |
 | RQ4 | 参数训练、STOP边界校准和最终 Router 选择分离后，是否能避免边界过拟合和手工调参？ | calibration 不训练/不排名审计、Dev 边界冻结、重复运行一致性 |
 | RQ5 | 在 readiness 或 Test 质量门失败时，系统是否能够如实返回失败而不修改协议？ | QWK/STOP readiness、freeze manifest、失败注册表和一次性 final report |
@@ -88,15 +87,17 @@ V1.3 正式质量指标、统计门和跨预算 Dev 排序仍冻结，不允许�
 
 ### 4.2 质量不可与资源交换
 
-不使用 `QWK - beta*Cost` 作为唯一训练、调参和结果选择规则。正式决策分两层，并保持一个预算条件策略适配全部正式预算档位：
+不使用 `QWK - beta*Cost` 作为唯一训练、调参和结果选择规则。正式决策分三层，并保持一个预算条件策略适配全部正式预算档位：
 
-1. 候选 Policy Package 必须在 Tight/Medium/Loose 每个预注册预算档位上分别通过 Paper 级配对 Bootstrap 零容忍质量非劣效门；
-2. 只有所有预算档位均可行的 Package 进入跨预算资源词典序。
+1. 候选 Policy Package 必须在 Tight/Medium/Loose 每个预注册预算档位上分别通过相对于固定参考策略的 Paper 级配对 Bootstrap 零容忍质量准入门；
+2. 在全部预算档位均准入的候选 Router Policy Package 中，只按 `Worst-(Budget,Dataset) Severe -> Worst-(Budget,Dataset) Unsafe Stop -> Mean-Budget Macro-NMAE -> Mean-Budget Macro-QWK -> Package ID` 自动确定唯一 Quality Champion；固定参考、Baseline 和消融不参与冠军或最终 checkpoint 选择；
+3. 其他候选必须在每个预算档位用相同四项零边界 Bootstrap 证明不劣于 Quality Champion，只有质量保护可行候选才进入跨预算资源词典序。
 
-设预算集合为 \(\mathcal B\)，Cost/Paper 的 Dev 选择值为各档位不加权平均，其他资源同理。固定顺序：
+设预算集合为 \(\mathcal B\)，Cost/Paper 的 Dev 选择值为各档位不加权平均，其他资源同理。最终固定顺序：
 
 ```text
-Package Quality Feasible = Yes（所有预算档位通过）
+Package Reference Admission Feasible = Yes
+→ Quality Protection Feasible = Yes
 → Mean-Budget Cost/Paper
 → Mean-Budget Elapsed Time/Paper
 → Mean-Budget Agent Calls/Paper
@@ -108,7 +109,7 @@ Package Quality Feasible = Yes（所有预算档位通过）
 → Policy Package ID
 ```
 
-前四项为主要优化对象；后四项仅在资源并列时打破并列，Policy Package ID 是最终确定性规则。最终只冻结一个预算条件 Package/checkpoint，质量失败不得由资源收益补偿。
+资源指标不能帮助候选通过参考准入门或 Quality Champion 保护门。若更便宜的候选严重错分率或其他质量指标不能证明不劣于冠军，它必须在资源排序前被淘汰。
 
 ### 4.3 禁止人工调边界
 
@@ -117,7 +118,7 @@ Package Quality Feasible = Yes（所有预算档位通过）
 ```text
 train_fit：学习模型参数和动作策略
 → train_calibration：对每个冻结checkpoint只校准STOP安全概率边界并组装Package
-→ dev：不改边界，只执行质量门和跨预算资源选择
+→ dev：不改边界，依次执行固定参考准入、Quality Champion 保护和跨预算资源选择
 → freeze：锁定唯一Package及全部协议
 → test：一次性最终评价
 ```
@@ -156,6 +157,19 @@ Agent cache 是隐藏环境查询表。每次动作执行后只暴露该动作�
 ### 4.8 Calibration 与 Dev 不重复
 
 `train_calibration` 对每个 checkpoint 只产生 STOP 边界或 failure，不输出跨 checkpoint 最终排名；Dev 输入边界固定的 Package，才执行最终质量筛选和资源排名。任何 calibration 梯度/replay 消费、calibration 选最终 Router 或 Dev 改边界均为阻塞性违规。
+
+### 4.9 Fixture Smoke 隔离但不分叉核心代码
+
+完整 Fixture Smoke 采用“四类资产隔离、核心实现复用”的结构：
+
+- 静态 fixture 与蓝图：`tests/fixtures/quality_constrained_smoke/`；
+- 集成契约：`tests/integration/test_quality_constrained_smoke.py`；
+- fixture-only 配置：`configs/experiments/fixture_smoke.yaml` 与专用 Agent 配置；
+- 持久化验收产物：`outputs/runs/fixture_smoke_<run_id>/`。
+
+Smoke 不写入 `data/processed/`，不读取27,375条正式主路由 Item，不调用真实 Agent，不向正式能力画像、预算、参考、replay、checkpoint 或论文结果汇总提供输入。`run_manifest.json` 必须固定 `execution_mode=fixture_smoke`、`is_fixture=true`、`formal_eligible=false`、`online_agent_calls=0`。蓝图/config/protocol 路径必须先经过白名单审计；正式入口读取到上述标记时必须 fail closed，并由实际 run manifest、cache scope、capability loader 探针验证拒绝。成功 run 最后生成逐文件哈希的 `fixture_artifact_manifest.json`，未覆盖文件数必须为0。
+
+隔离的只是数据、配置、cache、checkpoint fixture 和运行产物；`internal_split`、`build_internal_papers`、`cache`、`capability`、`quality_reference`、`budget_calibration`、`calibration`、`policy_package`、`paired_bootstrap` 与 `checkpoint_selector` 必须使用正式模块，禁止为 Smoke 复制一套简化选择逻辑。Router candidate 进入 Dev/Test-like 后必须实际读取冻结 STOP 边界，超过边界先执行验证动作并计入资源；`budget_feasible=false` 必须在参考准入前淘汰，Arbitrator 暴露意见必须进入 A2A Exchanges。
 
 ## 5. 数据、内部 Paper 重建与正式质量协议
 
@@ -276,6 +290,14 @@ Formal cache 前冻结：
 - Formal cache 及 support catalog 的规模、费用和时间估计。
 
 Pilot 产物不能晋升为 Formal cache，Pilot 资源分位数也不能直接充当正式预算档位。
+
+#### 6.3.1 CLIProxy GPT-5.6 Pilot 已批准执行方案
+
+真实 Pilot 的候选接入为本机 CLIProxy/CC Switch Responses-compatible 网关。候选模型与角色固定为：Cheap=`gpt-5.6-luna`、Mid/Evidence=`gpt-5.6-terra`、Strong/Arbitrator=`gpt-5.6-sol`。运行前必须以代理模型目录和响应实际 `model` 字段证明三个型号均可用；任一模型发生静默替换、usage 缺失或认证不可用时停止，不得自动回退到其他模型。
+
+100 Item 样本只从 `papers_train_fit.jsonl` 确定性抽取20份固定5题 strict Paper，固定 seed=42，不按 gold 或 Agent 误差选择。当前8种 Arbitrator context 全部是候选 arms，必须在相同100 Item上完整运行后再比较；5 Item与20 Item检查点只执行协议、模型身份、usage、成本、配额和稳定性停止门，不得提前按质量删除 context。完整候选规模为4个基础Agent加8种仲裁上下文，即1,200条成功记录；最多120次重试、总调用硬门1,320、按冻结官方 Standard API 价格计算的成本硬门75 USD。
+
+成本必须由实际上游 usage 的普通输入、缓存读取、缓存写入、输出与 reasoning 明细结合运行目录内冻结的 `pricing_manifest` 重算；reasoning tokens 作为 output 明细不得重复收费。Pilot 结束后按协议资格、安全/严重错误、增量质量、累计成本/延迟/calls/exchanges及可达状态内 Pareto 支配关系生成 context 保留建议，只有用户审批后的子集才能成为 Formal `context_support_catalog.json`。本阶段不执行1,000 Item耐久测试；100 Item报告完成后停止，由用户决定是否补充规模验证或进入 Formal cache。
 
 ### 6.4 Formal cache 顺序
 
@@ -493,7 +515,6 @@ r_\psi(s_{i,t})=P(\text{当前STOP导致严重错分}\mid s_{i,t})
 Always-Cheap
 Always-Mid
 Always-Strong
-Fixed Cascade
 Fixed Full Multi-Agent Workflow
 ```
 
@@ -518,7 +539,7 @@ Quality Metrics Defined = Yes
 
 ### 10.3 配对质量门
 
-冻结的是参考策略、预算映射、指标协议和选择程序，而不是 `train_calibration` 数值。Dev/Test 上让候选和对应参考在同一 split、Paper、Agent cache 与预算档位上配对评价。
+冻结的是参考策略、预算映射、指标协议和选择程序，而不是 `train_calibration` 数值。Dev 的第一层准入门和 Test 最终评价都让候选与对应固定参考在同一 split、Paper、Agent cache 与预算档位上配对；Dev 的第二层质量保护门复用同一程序，但将比较基准替换为自动确定的 Quality Champion。Test 不重新选择冠军。
 
 固定 Bootstrap：
 
@@ -580,22 +601,25 @@ calibration 不允许：
 - 输出最终 checkpoint 排名或最终选择；
 - 为主方法的 Mid/Strong/VERIFY/A2A/ARBITRATE 生成升级阈值。
 
-### 11.3 Dev Auto-Select：只比较固定 Package
+### 11.3 Dev Auto-Select：参考准入、质量保护后比较资源
 
 Dev 对每个候选 Package：
 
 1. 验证 calibration manifest、STOP 边界和全部 hash 已冻结；
 2. 在每个预算档位计算正式指标与 readiness；
-3. 在每个预算档位执行5000次 Paper 级配对 Cluster Bootstrap；
-4. 任一预算档位质量不可行即淘汰整个 Package；
-5. 对所有预算档位均可行的 Package，计算跨预算等权 Cost/Paper、Elapsed Time/Paper、Agent Calls/Paper、A2A Exchanges/Paper；
-6. 按冻结词典序自动输出唯一预算条件 Policy Package/checkpoint。
+3. 在每个预算档位执行候选对固定参考策略的5000次 Paper 级配对 Cluster Bootstrap；
+4. 任一预算档位参考准入失败即淘汰整个 Package；
+5. 在全预算准入候选中，不使用资源指标，按冻结质量词典序确定唯一 Quality Champion；
+6. 对其余准入候选，在每个预算档位执行候选对 Quality Champion 的四项零边界配对 Bootstrap；
+7. 任一预算或任一质量维度不能证明不劣于冠军即淘汰，资源更低不能豁免；
+8. 对质量保护可行 Package 计算跨预算等权 Cost/Paper、Elapsed Time/Paper、Agent Calls/Paper、A2A Exchanges/Paper；
+9. 按冻结资源词典序自动输出唯一预算条件 Policy Package/checkpoint。
 
-Dev 边界修改次数必须为0。相同输入、种子和 manifests 必须输出相同结果。
+Dev 边界修改次数和 Quality Champion 人工替换次数必须均为0。相同输入、种子和 manifests 必须输出相同冠军、保护集合和最终结果。
 
 ### 11.4 Freeze
 
-生成 `policy_freeze_manifest.json`，记录唯一 checkpoint、STOP 边界、质量协议、预算、参考映射、各预算质量门、跨预算资源键、internal manifests、Agent cache 和代码指纹。
+生成 `policy_freeze_manifest.json`，记录唯一 checkpoint、STOP 边界、质量协议、预算、参考映射、各预算参考准入门、Quality Champion 及选择键、候选对冠军质量保护门、跨预算资源键、internal manifests、Agent cache 和代码指纹。
 
 ### 11.5 Test
 
@@ -608,10 +632,8 @@ Test 只读取唯一冻结 Package 和隔离 test cache，一次性运行 final 
 仅在 V1.4 重建的 `paper_train_fit_*` 和 train_fit hidden cache 环境中，使用固定 behavior policies 生成：
 
 - 固定 Agent 轨迹；
-- 固定级联轨迹；
 - 自动阈值轨迹；
 - A2A/仲裁轨迹；
-- greedy/myopic轨迹；
 - 多预算探索轨迹。
 
 ### 12.2 每步记录
@@ -662,10 +684,7 @@ Replay buffer 只允许 train_fit 轨迹；train_calibration、dev 和 test 均�
 
 ### 13.3 非 RL 动态方法
 
-- Fixed Cascade；
 - Contextual Bandit；
-- Per-item Myopic Router；
-- Greedy Marginal Utility；
 - Top-k/Knapsack Allocation。
 
 ### 13.4 主方法
@@ -764,8 +783,10 @@ LCB95(delta_macro_qwk) >= 0
 ```text
 Method
 Budget ID
-Budget Quality Feasible
-Package Quality Feasible
+Budget Reference Admission Feasible
+Package Reference Admission Feasible
+Quality Champion
+Quality Protection Feasible
 Quality Gate Status
 Worst-Dataset Severe Error
 UCB95(max_dataset_delta_severe)
@@ -784,7 +805,7 @@ A2A Exchanges/Paper
 Budget Exhaustion
 ```
 
-Dev 只在所有预算档位均可行的 Package 中按跨预算资源四项优先排序。主方法只有 `Package Quality Feasible = Yes` 时才形成总体资源节省声明；每个预算档位的完整结果仍保留。
+Dev 先报告相对于固定参考的准入状态，再报告 Quality Champion 和候选对冠军的质量保护状态。只有 `Quality Protection Feasible = Yes` 的 Package 才进入跨预算资源四项优先排序并形成总体资源节省声明；每个预算档位的完整结果仍保留。
 
 ### 15.6 失败保留
 
@@ -812,7 +833,7 @@ Dev 只在所有预算档位均可行的 Package 中按跨预算资源四项优�
 
 统一 Agent、cache、difficulty/capability fixture 和断点续跑已完成。门禁：Fixture smoke 通过，不代表正式论文 Agent 质量。
 
-### Phase 3：V1.4 Internal Split、Paper Rebuild 与协议基础（下一阶段）
+### Phase 3：V1.4 Internal Split、Paper Rebuild、协议基础与完整 Fixture Smoke（已完成）
 
 1. 新增 internal split/rebuild schema 与配置；
 2. 从27,375条 train 主路由 Item 构造 prompt/leakage connected components；
@@ -821,11 +842,12 @@ Dev 只在所有预算档位均可行的 Package 中按跨预算资源四项优�
 5. 生成 internal manifests、leftover 和阻塞性 audit；
 6. 实现 V1.3 quality protocol、QWK readiness 和 Paper paired Bootstrap；
 7. 实现 calibration 不训练/不排名与 Dev 不改边界的职责测试；
-8. 完成 fixture data-to-package smoke。
+8. 在专用 fixture/config/test/run 位置完成 `item component split -> separate paper rebuild -> fixture cache -> train_fit fixture checkpoint -> train_calibration reference/budget/support/STOP calibration -> Package -> Dev three-layer selection -> freeze -> test-like one-shot`；
+9. 审核测试契约与实现，使用预算不可行候选、NaN/重复 STOP 证据、失败 cache 续跑、正式路径/loader、STOP 边界应用、A2A 计数、完整确定性和 artifact inventory 反例，确认不存在 smoke-only 质量/选择旁路、Fixture/Formal 资产混用和人工阈值。
 
-门禁：内部 Item/Prompt/Component/Paper 泄漏与 strict mix 违规全部为0；旧 `paper_train_*` 直接拆分次数为0；calibration gradient/replay/ranking 违规为0。
+门禁：内部 Item/Prompt/Component/Paper 泄漏与 strict mix 违规全部为0；旧 `paper_train_*` 直接拆分次数为0；Fixture formal acceptance/online calls/cross-mode reuse 为0；calibration gradient/replay/ranking、Dev boundary update、Quality Champion resource read/manual override、test-like training read 均为0。
 
-### Phase 4：真实 Agent Pilot 与 Formal Cache
+### Phase 4：真实 Agent Pilot 与 Formal Cache（下一阶段，需用户单独批准）
 
 1. 从重建后的完整 `paper_train_fit_*` 抽取约100 Item/20 Paper Pilot；
 2. 用户批准后运行，审核质量互补性、Evidence/Arbitrator 增益和费用；
@@ -846,15 +868,16 @@ Dev 只在所有预算档位均可行的 Package 中按跨预算资源四项优�
 
 门禁：calibration 不更新参数、不进入 replay、不跨 checkpoint 排名；主方法升级动作仍由 Router 学习。
 
-### Phase 6：Dev 固定 Package 质量门、最终选择与 Baseline/消融
+### Phase 6：Dev 固定参考准入、Quality Champion 保护、最终选择与 Baseline/消融
 
-1. 对所有边界已冻结 Package 和 baseline 计算正式指标与 readiness；
-2. 在每个预算档位执行对应参考的 paired Paper Bootstrap 质量门；
-3. 淘汰任一预算档位质量不可行的 Package；
-4. 按跨预算资源优先词典序自动选择唯一 Package/checkpoint；
-5. 生成 freeze manifest，完成 baseline、消融和预算分析。
+1. 对所有边界已冻结 Package 和保留 baseline 计算正式指标与 readiness；
+2. 在每个预算档位执行对应固定参考的 paired Paper Bootstrap 准入门；
+3. 淘汰任一预算档位准入失败的 Package，并只按冻结质量词典序确定唯一 Quality Champion；
+4. 对其余准入候选执行候选对冠军的质量保护门，淘汰任何不能证明质量不劣于冠军的 Package；
+5. 只在质量保护可行候选中按跨预算资源词典序自动选择唯一 Package/checkpoint；
+6. 生成 freeze manifest，完成保留 baseline、消融和预算分析。
 
-门禁：Dev 边界修改次数为0；没有全预算可行 Package 时记录失败，不返回 calibration 改边界。
+门禁：Dev 边界修改次数和 Quality Champion 人工替换次数均为0；没有全预算参考准入 Package 时记录失败，不返回 calibration 改边界；只有冠军通过质量保护门时直接选择冠军。
 
 ### Phase 7：Test Final Evaluation
 
@@ -946,7 +969,10 @@ outputs/runs/<run_id>/
 ```text
 configs/
 ├── dataset.yaml
-└── quality_protocol.yaml
+├── quality_protocol.yaml
+└── experiments/
+    ├── fixture_smoke.yaml
+    └── fixture_smoke_agents.yaml
 
 src/a2a_dygrade_rl/
 ├── datasets/
@@ -986,7 +1012,12 @@ src/a2a_dygrade_rl/
 
 scripts/
 ├── 04a_build_internal_split.py
-└── 04c_build_internal_papers.py
+├── 04c_build_internal_papers.py
+└── 04d_run_quality_constrained_fixture_smoke.py
+
+tests/
+├── fixtures/quality_constrained_smoke/
+└── integration/test_quality_constrained_smoke.py
 ```
 
 CLI 只做流程编排，业务逻辑留在 `src/`。具体任务见 `tasks.md`。
@@ -1021,7 +1052,8 @@ CLI 只做流程编排，业务逻辑留在 `src/`。具体任务见 `tasks.md`�
 2. internal manifests/schema/config 与 fixture tests；
 3. V1.3 quality protocol、QWK readiness、paired Bootstrap；
 4. train_fit-only 参数/轨迹边界与 calibration no-gradient/no-ranking 门禁；
-5. per-checkpoint STOP calibration、Calibration Package 与 Dev-only selector smoke；
+5. per-checkpoint STOP calibration、Calibration Package，以及 Dev 的固定参考准入、Quality Champion 保护与资源 selector smoke；
 6. 向用户提交基于重建 train_fit Paper 的真实 Agent Pilot 模型、费用、support catalog 和依赖审批方案。
 
-本轮只同步设计与任务，不自动进入代码实现；等待用户审阅 `spec.md`、`plan.md` 与 `tasks.md`。
+完整 Fixture Smoke 已实现、审核并通过；下一步只准备 T052A 的真实 Agent Pilot 候选配置和审批材料，不联网、不下载依赖、不调用真实模型，直到用户单独批准。
+

@@ -1,4 +1,4 @@
-"""Agent registry with explicit fixture/real mode gates."""
+﻿"""Agent registry with explicit fixture/real mode gates."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from a2a_dygrade_rl.agents.cheap_agent import CheapAgent
 from a2a_dygrade_rl.agents.evidence_agent import EvidenceAgent
 from a2a_dygrade_rl.agents.mid_agent import MidAgent
 from a2a_dygrade_rl.agents.strong_agent import StrongAgent
-from a2a_dygrade_rl.utils.llm_client import FixtureClient, LLMClient
+from a2a_dygrade_rl.utils.llm_client import LLMClient, build_llm_client
 
 
 AGENT_CLASSES = {
@@ -29,11 +29,9 @@ def build_agent_registry(
 ) -> dict[str, Any]:
     is_fixture_mode = execution_mode == "fixture_smoke"
     if client is None:
-        if not is_fixture_mode:
-            raise ValueError("真实运行模式必须显式提供非 fixture LLM client")
-        client = FixtureClient(seed=seed)
+        client = build_llm_client(config, execution_mode=execution_mode, seed=seed)
     if is_fixture_mode != bool(client.is_fixture):
-        raise ValueError("FixtureClient 与 execution_mode 不匹配")
+        raise ValueError("LLM client 与 execution_mode 不匹配")
 
     registry: dict[str, Any] = {}
     for agent_config in config.get("agents", {}).values():

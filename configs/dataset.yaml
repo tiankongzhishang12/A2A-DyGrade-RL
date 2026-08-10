@@ -1,4 +1,4 @@
-run:
+﻿run:
   seed: 42
   rule_version: v1
 
@@ -31,9 +31,34 @@ splits:
   dev: 0.1
   test: 0.2
 
+internal_split:
+  enabled: true
+  source_split: train
+  source_scope: paper_manifest_train_items
+  expected_source_item_count: 27375
+  assignment_unit: item_component
+  legacy_paper_assignment: forbidden
+  train_fit_ratio: 0.8
+  train_calibration_ratio: 0.2
+  seed: 20260729
+  rule_version: internal_item_component_v1.4
+  component_relations:
+    - dataset_prompt_group
+    - exact_prompt_answer
+    - existing_leakage_component
+  optimization_priority:
+    - component_integrity
+    - both_splits_cover_all_datasets_and_support_strict_papers
+    - maximize_total_strict_five_item_papers
+    - minimize_target_ratio_deviation
+    - stable_hash_tie_break
+  reject_source_splits:
+    - dev
+    - test
+
 paper:
   min_items: 5
-  max_items: 8
+  max_items: 5
   target_items: 5
   mix_mode: strict
   strict_quotas:
@@ -45,6 +70,15 @@ paper:
       dress: 1
   budgets:
     max_cost: 0.20
-    max_latency: 30.0
+    max_elapsed_time: 30.0
     max_agent_calls: 12
-    max_a2a_messages: 6
+    max_a2a_exchanges: 6
+
+internal_paper:
+  rebuild_separately: true
+  inherit_legacy_paper_id: false
+  cross_split_borrowing: forbidden
+  repeated_item_reference: forbidden
+  fixed_item_count: 5
+  record_leftovers: true
+  rule_version: internal_strict_paper_v1.4

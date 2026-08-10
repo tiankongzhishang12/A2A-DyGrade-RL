@@ -4,7 +4,8 @@ from pathlib import Path
 import pytest
 
 from a2a_dygrade_rl.agents.base_agent import BaseAgent
-from a2a_dygrade_rl.agents.cache import build_cache_key, validate_run_identity
+from a2a_dygrade_rl.agents.cache import build_cache_key, validate_cache_output_root, validate_run_identity
+from a2a_dygrade_rl.agents.capability import build_capability_profiles
 from a2a_dygrade_rl.agents.cheap_agent import CheapAgent
 from a2a_dygrade_rl.utils.llm_client import FixtureClient
 from a2a_dygrade_rl.utils.validation import validate_agent_output
@@ -114,6 +115,7 @@ def test_run_identity_accepts_valid_mode_combinations(run_id, execution_mode, is
         ("fixture_smoke_001", "real_pilot", False),
         ("formal_experiment_001", "formal_experiment", False),
         ("unknown_001", "unknown_mode", False),
+        ("fixture_smoke_/../../data", "fixture_smoke", True),
     ],
 )
 def test_run_identity_rejects_invalid_mode_combinations(run_id, execution_mode, is_fixture):
@@ -139,3 +141,68 @@ def test_agent_request_never_contains_gold_score():
     assert 0.0 <= prediction["pred_score"] <= 3.0
 
 
+
+
+def test_capability_qwk_normalizes_score_ranges_above_ten():
+    items = []
+    records = []
+    difficulty = []
+    for index, gold in enumerate((0.0, 15.0)):
+        item = sample_item()
+        item["item_id"] = f"wide_{index}"
+        item["dataset"] = "dress"
+        item["gold_score"] = gold
+        item["score_max"] = 15.0
+        items.append(item)
+        record = valid_record()
+        record.update({
+            "item_id": item["item_id"],
+            "pred_score": gold,
+            "gold_score": gold,
+            "metadata": {"score_min": 0.0, "score_max": 15.0},
+        })
+        records.append(record)
+        difficulty.append({"item_id": item["item_id"], "difficulty_label": "Easy", "source_split": "train"})
+    profiles = build_capability_profiles(items, records, difficulty, low_support_threshold=1)
+    assert len(profiles) == 1
+    assert profiles[0]["qwk_defined"] is True
+    assert profiles[0]["qwk"] == 1.0
+
+
+@pytest.mark.parametrize(("field", "value"), [("cost", float("nan")), ("latency", float("inf"))])
+def test_agent_output_rejects_nonfinite_resource_values(field, value):
+    record = valid_record()
+    record[field] = value
+    with pytest.raises(ValueError):
+        validate_agent_output(record, item=sample_item(), allowed_agents={"CheapAgent"})
+
+
+@pytest.mark.parametrize(
+    ("execution_mode", "is_fixture"),
+    [
+        ("fixture_smoke", "true"),
+        ("formal_experiment", "false"),
+        ("formal_experiment", True),
+        ("formal_experiment", False),
+        ("real_pilot", False),
+        ("fixture_smoke", False),
+        ("unknown_mode", False),
+    ],
+)
+def test_agent_output_requires_explicit_mode_fixture_identity(execution_mode, is_fixture):
+    record = valid_record()
+    record["execution_mode"] = execution_mode
+    record["is_fixture"] = is_fixture
+    with pytest.raises(ValueError):
+        validate_agent_output(record, item=sample_item(), allowed_agents={"CheapAgent"})
+
+
+
+def test_cache_output_root_cannot_target_project_data_or_checkpoint_directories(tmp_path):
+    root = Path(__file__).resolve().parents[2]
+    assert validate_cache_output_root(root / "outputs" / "runs") == (root / "outputs" / "runs").resolve()
+    assert validate_cache_output_root(tmp_path / "outputs" / "runs") == (tmp_path / "outputs" / "runs").resolve()
+    with pytest.raises(ValueError):
+        validate_cache_output_root(root / "data" / "processed")
+    with pytest.raises(ValueError):
+        validate_cache_output_root(root / "checkpoints")

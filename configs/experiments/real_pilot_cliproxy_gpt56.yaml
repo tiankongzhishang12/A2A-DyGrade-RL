@@ -1,0 +1,96 @@
+﻿cache_schema_version: "1.1"
+
+provider:
+  type: openai_responses_compatible
+  provider_id: openai
+  gateway_id: cliproxy_ccswitch
+  base_url: http://127.0.0.1:8317/v1
+  api_key_env: CLIPROXY_API_KEY
+  usage_source: upstream_reported
+  # ?run???????????run?????configs/agents.resolved.yaml???????????
+  pricing_manifest_path: configs/pricing/openai_standard_20260731.yaml
+  require_reported_model_match: true
+  timeout_seconds: 180
+  max_attempts: 2
+  retry_backoff_seconds: 1.0
+  max_total_calls: 1320
+  max_cost_usd: 75.0
+  concurrency: 4
+
+candidate_arbitrator_contexts:
+  - [CheapAgent, MidAgent]
+  - [CheapAgent, StrongAgent]
+  - [MidAgent, StrongAgent]
+  - [CheapAgent, MidAgent, StrongAgent]
+  - [CheapAgent, MidAgent, EvidenceAgent]
+  - [CheapAgent, StrongAgent, EvidenceAgent]
+  - [MidAgent, StrongAgent, EvidenceAgent]
+  - [CheapAgent, MidAgent, StrongAgent, EvidenceAgent]
+
+# cache builder向后兼容读取该字段；Pilot完成前不得视为Formal catalog。
+arbitrator_contexts:
+  - [CheapAgent, MidAgent]
+  - [CheapAgent, StrongAgent]
+  - [MidAgent, StrongAgent]
+  - [CheapAgent, MidAgent, StrongAgent]
+  - [CheapAgent, MidAgent, EvidenceAgent]
+  - [CheapAgent, StrongAgent, EvidenceAgent]
+  - [MidAgent, StrongAgent, EvidenceAgent]
+  - [CheapAgent, MidAgent, StrongAgent, EvidenceAgent]
+
+agents:
+  cheap:
+    agent_id: CheapAgent
+    mode: real
+    model_id: gpt-5.6-luna
+    model_revision: upstream-reported
+    prompt_path: prompts/real_pilot_v1/cheap_scorer.txt
+    prompt_version: real-pilot-v1
+    generation_parameters:
+      reasoning_effort: none
+      max_output_tokens: 256
+      store: false
+  mid:
+    agent_id: MidAgent
+    mode: real
+    model_id: gpt-5.6-terra
+    model_revision: upstream-reported
+    prompt_path: prompts/real_pilot_v1/mid_scorer.txt
+    prompt_version: real-pilot-v1
+    generation_parameters:
+      reasoning_effort: low
+      max_output_tokens: 512
+      store: false
+  strong:
+    agent_id: StrongAgent
+    mode: real
+    model_id: gpt-5.6-sol
+    model_revision: upstream-reported
+    prompt_path: prompts/real_pilot_v1/strong_scorer.txt
+    prompt_version: real-pilot-v1
+    generation_parameters:
+      reasoning_effort: medium
+      max_output_tokens: 768
+      store: false
+  evidence:
+    agent_id: EvidenceAgent
+    mode: real
+    model_id: gpt-5.6-terra
+    model_revision: upstream-reported
+    prompt_path: prompts/real_pilot_v1/evidence_agent.txt
+    prompt_version: real-pilot-v1
+    generation_parameters:
+      reasoning_effort: low
+      max_output_tokens: 512
+      store: false
+  arbitrator:
+    agent_id: ArbitratorAgent
+    mode: real
+    model_id: gpt-5.6-sol
+    model_revision: upstream-reported
+    prompt_path: prompts/real_pilot_v1/arbitrator_agent.txt
+    prompt_version: real-pilot-v1
+    generation_parameters:
+      reasoning_effort: medium
+      max_output_tokens: 768
+      store: false

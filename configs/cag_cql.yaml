@@ -1,7 +1,24 @@
-training:
+﻿training:
   seed: 42
   batch_size: 32
   epochs: 5
   learning_rate: 0.0003
   discount: 0.99
   cql_alpha: 1.0
+  permitted_split: train_fit
+  reject_splits:
+    - train_calibration
+    - dev
+    - test
+  calibration_no_gradient: true
+  calibration_no_replay: true
+  calibration_no_checkpoint_ranking: true
+  checkpoint_selection_split: dev
+  test_mode: final_evaluation_only
+
+checkpoint_candidates:
+  generation: preregistered_train_fit_checkpoints
+  calibration_result: stop_boundary_or_failure
+  final_selection: dev_three_layer_selector
+  per_budget_checkpoint_selection: forbidden
+  manual_weighted_quality_cost_selection: forbidden

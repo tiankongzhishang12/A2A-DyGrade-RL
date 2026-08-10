@@ -1,4 +1,4 @@
-"""Shared Agent wrapper contract."""
+﻿"""Shared Agent wrapper contract."""
 
 from __future__ import annotations
 
@@ -64,8 +64,9 @@ class BaseAgent(ABC):
         response = self.client.complete(request, self.agent_id)
         parsed = self.parse_response(response.payload)
         parsed["token_usage"] = int(response.token_usage)
+        parsed["usage"] = response.usage.to_dict()
         parsed["latency"] = max(float(self.config.get("latency", response.latency)), float(response.latency))
-        parsed["cost"] = self.estimate_cost(response.token_usage)
+        parsed["cost"] = float(response.cost) if response.cost is not None else self.estimate_cost(response.token_usage)
         parsed["client_metadata"] = response.metadata
         parsed["request"] = request
         self.validate_prediction(parsed, item)
@@ -94,3 +95,4 @@ class BaseAgent(ABC):
     @abstractmethod
     def role_name(self) -> str:
         raise NotImplementedError
+

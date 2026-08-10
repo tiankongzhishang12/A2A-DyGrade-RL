@@ -2,9 +2,9 @@
 
 > 方法名称：**A2A-DyGrade-RL**
 > 英文题目：**Quality-Constrained Multi-Agent Dynamic Routing for Simulated Paper-Level Automated Scoring**
-> 版本：2.2（同步 V1.4 职责与内部拆分正式稿）
+> 版本：2.3（同步 V1.4 职责、内部拆分与质量保护正式稿）
 > 修订日期：2026-07-29
-> 状态：V1.4 正式设计稿（等待实现）
+> 状态：V1.4 质量保护与精简 Baseline 正式设计稿（等待实现）
 > 最高规则：`AGENTS.md`
 
 ---
@@ -14,7 +14,7 @@
 本方案统一执行以下六项正式决定：
 
 1. 论文方向正式确定为：**面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法研究**。
-2. 评分准确性和严重错分风险是最高优先级；必须先通过零容忍质量非劣效门，资源下降不得补偿质量失败。
+2. 评分准确性和严重错分风险是最高优先级；必须先通过固定参考准入门，再通过 Quality Champion 质量保护门，资源下降不得补偿相对于参考或冠军的质量失败。
 3. 主方法的下一 Item、升级、核验、二评和仲裁由 Router 学习；只对 STOP 安全概率边界进行独立自动校准，禁止研究者根据结果手工调边界。
 4. 正式质量协议固定为 Gate Error、Severe/Extreme Error、Unsafe Stop、Macro-NMAE、固定11档 Macro-QWK 和 Paper 级配对 Cluster Bootstrap。
 5. `train_fit` 只训练参数，`train_calibration` 只校准每个冻结 checkpoint 的 STOP 安全边界并组装 Package，Dev 才在完整 Package 之间选择唯一 Router；三者职责不得混用。
@@ -28,7 +28,7 @@
 → 分别重建train_fit/train_calibration strict Paper
 → train_fit：学习Router和风险模型参数
 → train_calibration：只校准STOP安全边界并冻结参考/预算/Package
-→ dev：只比较完整固定Package，执行质量门后资源优先选择唯一checkpoint
+→ dev：先执行固定参考准入门，再确定Quality Champion并执行质量保护门，最后按资源词典序选择唯一checkpoint
 → freeze：锁定模型、Prompt、指标协议、边界、预算、质量门和checkpoint
 → test：一次性最终评价；质量门不通过即如实保留失败
 ```
@@ -71,7 +71,7 @@
 - Router 对下一任务和下一操作的联合选择；
 - 自动质量参考、自动风险校准和自动 checkpoint 选择；
 - 质量可行条件下的资源优化；
-- 强分类器、Bandit、greedy、knapsack 与 RL 的公平比较。
+- 强分类器、Bandit、knapsack 与 RL 的公平比较。
 
 ### 2.2 本文不研究
 
@@ -910,7 +910,6 @@ Risk Classifier + Greedy
 Always-Cheap
 Always-Mid
 Always-Strong
-Fixed Cascade
 Fixed Full Multi-Agent Workflow
 ```
 
@@ -971,7 +970,7 @@ LCB_{95}\left(\Delta MacroQWK\right)\ge 0
 
 其中 \(g\in\{DREsS, ASAP\text{-}SAS, SAS\text{-}Bench\}\)。若候选或参考任一主指标未定义、`STOP count = 0`、QWK readiness 失败、Bootstrap 失败、置信区间跨0或未达到边界，统一输出 `quality_noninferiority_inconclusive` 或更具体 readiness failure，并令 `Quality Feasible = No`。
 
-零非劣效界表示本研究不预先允许任何质量下降；资源收益不能补偿统计质量门失败。
+零非劣效界表示本研究不预先允许任何质量下降；资源收益不能补偿统计质量门失败。第17节和第18节会复用同一 Bootstrap 程序，将比较基准从固定参考替换为 Quality Champion，以执行第二层质量保护门。
 
 ## 17. 质量绝对优先的优化目标
 
@@ -983,10 +982,32 @@ LCB_{95}\left(\Delta MacroQWK\right)\ge 0
 
 作为主模型选择原则，因为手工或结果后调整 \(\beta\) 会把质量损失转化为可接受的资源收益。
 
-正式目标分两层：
+正式目标分三层：
 
-1. **预算档位质量门**：同一个预算条件 Policy Package 必须在 Tight/Medium/Loose 每个预注册档位上分别通过第16.3节的零容忍配对统计质量门；
-2. **Package 资源优化**：仅在所有预算档位均可行的候选 Package 中最小化跨预算等权聚合的每 Paper 资源消耗。
+1. **固定参考策略准入门**：同一个预算条件 Policy Package 必须在 Tight/Medium/Loose 每个预注册档位上分别通过第16.3节相对于冻结参考策略的零容忍配对统计质量门；
+2. **质量冠军保护门**：在所有预算档位均准入的候选中，先只按质量指标自动确定唯一 Quality Champion；其余候选必须在每个预算档位证明四项正式质量指标均不劣于该冠军；
+3. **Package 资源优化**：只有通过质量冠军保护门的候选，才允许最小化跨预算等权聚合的每 Paper 资源消耗。
+
+Quality Champion 只在候选 Router Policy Package 中确定；固定参考、Baseline 和消融只用于评价报告，不具备冠军或最终 checkpoint 资格。其固定选择键不包含任何资源指标：
+
+```text
+Worst-(Budget,Dataset) Severe Error（低）
+→ Worst-(Budget,Dataset) Unsafe Stop（低）
+→ Mean-Budget Macro-NMAE（低）
+→ Mean-Budget Macro-QWK（高）
+→ Policy Package ID（升序）
+```
+
+对每个准入候选 \(\pi\) 与 Quality Champion \(\pi^*\)，在相同 Dev Paper、cache、预算与重采样索引上重新计算“候选减冠军”的四项配对 Bootstrap 边界。只有 Tight/Medium/Loose 每档均满足：
+
+```text
+UCB95(max_dataset_delta_severe) <= 0
+UCB95(max_dataset_delta_unsafe_stop) <= 0
+UCB95(delta_macro_nmae) <= 0
+LCB95(delta_macro_qwk) >= 0
+```
+
+才令 `Quality Protection Feasible = Yes`。Quality Champion 与自身比较时自动通过；资源更低但严重错分、Unsafe Stop、NMAE 或 QWK 不能证明不劣于冠军的候选不得进入资源排序。
 
 设正式预算集合为 \(\mathcal B\)，定义：
 
@@ -994,10 +1015,11 @@ LCB_{95}\left(\Delta MacroQWK\right)\ge 0
 \overline{C}=\frac{1}{|\mathcal B|}\sum_{b\in\mathcal B}CostPerPaper_b
 \]
 
-Elapsed Time、Agent Calls 和 A2A Exchanges 使用相同的不加权平均。Dev 固定词典序为：
+Elapsed Time、Agent Calls 和 A2A Exchanges 使用相同的不加权平均。Dev 最终固定词典序为：
 
 ```text
-Package Quality Feasible = Yes（所有预算档位通过）
+Package Reference Admission Feasible = Yes
+→ Quality Protection Feasible = Yes
 → Mean-Budget Cost/Paper（低）
 → Mean-Budget Elapsed Time/Paper（低）
 → Mean-Budget Agent Calls/Paper（低）
@@ -1008,8 +1030,6 @@ Package Quality Feasible = Yes（所有预算档位通过）
 → Mean-Budget Macro-QWK（高）
 → Policy Package ID（升序，确定性最终并列规则）
 ```
-
-质量指标出现在资源指标之后仅用于打破资源并列，不表示允许质量下降：进入该排序前，候选已经在每个正式预算档位通过同一个零容忍质量门。
 
 训练实现可使用 separate critics、Lagrangian/primal-dual 或 constrained CQL，但质量与资源不得压成由研究者结果后调节的单一手工权重。最终只冻结一个能够以剩余预算为状态输入的 Policy Package/checkpoint，不得按预算档位人工挑选不同模型。
 
@@ -1056,17 +1076,20 @@ calibration 明确禁止：
 
 因此它的输出是“一组边界已固定的候选 Package”，不是最终冠军。
 
-### 18.3 Dev Auto-Select：只选择完整 Package
+### 18.3 Dev Auto-Select：参考准入、质量保护后再选择资源
 
 Dev 对每个候选 Policy Package 执行以下不可更改流程：
 
 1. 读取冻结的预算—参考映射、STOP 边界、指标协议和候选 Package；
-2. 在 Tight/Medium/Loose 每个预算档位分别运行 Paper 级配对 Bootstrap 质量门；
-3. 任一档位 `Quality Feasible = No` 或 readiness failure，则淘汰整个 Package；
-4. 在所有预算档位均可行的剩余 Package 中，按 `Mean-Budget Cost/Paper -> Mean-Budget Elapsed Time/Paper -> Mean-Budget Agent Calls/Paper -> Mean-Budget A2A Exchanges/Paper -> Worst-(Budget,Dataset) Severe -> Worst-(Budget,Dataset) Unsafe Stop -> Mean-Budget Macro-NMAE -> Mean-Budget Macro-QWK -> Policy Package ID` 自动选择唯一 Package；
-5. 保存每个档位的指标与置信区间、跨预算聚合键、淘汰原因和最终选择。
+2. 在 Tight/Medium/Loose 每个预算档位分别运行候选对固定参考策略的 Paper 级配对 Bootstrap 准入门；
+3. 任一档位准入失败或 readiness failure，则淘汰整个 Package；
+4. 在全部预算档位均准入的候选中，按 `Worst-(Budget,Dataset) Severe -> Worst-(Budget,Dataset) Unsafe Stop -> Mean-Budget Macro-NMAE -> Mean-Budget Macro-QWK -> Policy Package ID` 自动确定唯一 Quality Champion，禁止使用资源指标；
+5. 以 Quality Champion 为质量保护基准，对其余准入候选在每个预算档位重新执行候选减冠军的四项零边界配对 Bootstrap；
+6. 任一质量维度或任一预算档位不能证明不劣于 Quality Champion，候选即标记 `Quality Protection Feasible = No`，即使资源更低也不得进入最终排序；
+7. 只在质量保护可行候选中，按 `Mean-Budget Cost/Paper -> Mean-Budget Elapsed Time/Paper -> Mean-Budget Agent Calls/Paper -> Mean-Budget A2A Exchanges/Paper -> 原质量并列键 -> Policy Package ID` 自动选择唯一 Package；
+8. 保存每个档位的参考准入边界、Quality Champion 选择键、候选对冠军的质量保护边界、资源聚合键、淘汰原因和最终选择。
 
-Dev 不重新训练、不重新校准、不移动阈值、不更换指标定义，也不按预算档位人工挑不同 checkpoint。
+Dev 不重新训练、不重新校准、不移动阈值、不更换指标定义，也不人工更换 Quality Champion 或按预算档位挑不同 checkpoint。
 
 ### 18.4 Freeze
 
@@ -1098,10 +1121,8 @@ Test 只执行一次性 final evaluation。唯一冻结 Package 在每个预算�
 
 ```text
 固定Agent
-固定级联
 自动阈值
 A2A/仲裁
-myopic/greedy
 多预算探索
 ```
 
@@ -1150,10 +1171,7 @@ Hindsight Budget Relabeling 可保留，但：
 
 ### 20.3 非 RL 动态方法
 
-- Fixed Cascade；
 - Contextual Bandit；
-- Per-item Myopic Router；
-- Greedy Marginal Utility；
 - Top-k/Knapsack Allocation。
 
 ### 20.4 主方法
@@ -1294,26 +1312,26 @@ Loose
 
 图中应：
 
-- 标记 `Quality Feasible`；
-- 将质量不合格点显示为不可行；
-- 只对质量可行点计算资源节省；
+- 分别标记 `Reference Admission Feasible` 与 `Quality Protection Feasible`；
+- 将参考准入失败或冠军保护失败点显示为不可行；
+- 只对 Quality Champion 保护可行点计算资源节省；
 - 同时报告 Severe Error 和 Unsafe Stop。
 
 更准确名称为：
 
-> **质量可行资源前沿（Quality-Feasible Resource Frontier）**。
+> **质量保护资源前沿（Quality-Protected Resource Frontier）**。
 
 ---
 
 ## 24. 研究问题
 
-### RQ1：质量门通过后能否节约资源？
+### RQ1：通过固定参考准入和 Quality Champion 保护后能否节约资源？
 
 在不降低 QWK、不增加 NMAE、严重错分和不安全停止的前提下，主方法能否降低成本、累计延迟、调用和通信？
 
 ### RQ2：为什么需要强化学习？
 
-在相同 hidden cache 和预算下，CAG-CQL 是否优于分类器、自动阈值、Bandit、greedy 和 knapsack？
+在相同 hidden cache 和预算下，CAG-CQL 是否优于分类器、自动阈值、Bandit 和 knapsack？
 
 ### RQ3：Stop-Risk Head 是否必要？
 
@@ -1336,8 +1354,10 @@ Loose
 ```text
 Method
 Budget ID
-Budget Quality Feasible
-Package Quality Feasible
+Budget Reference Admission Feasible
+Package Reference Admission Feasible
+Quality Champion
+Quality Protection Feasible
 Quality Gate Status
 Worst-Dataset Severe Error
 UCB95(max_dataset_delta_severe)
@@ -1356,7 +1376,7 @@ A2A Exchanges/Paper
 Budget Exhaustion
 ```
 
-主表先展示预算档位质量门、Package 级全预算可行性和统计边界，再展示资源。主方法只有在 `Package Quality Feasible = Yes` 时才允许形成总体资源优化结论；分预算资源差异仍完整报告。
+主表先展示预算档位参考准入、Package 级全预算准入、Quality Champion、候选对冠军的质量保护状态和统计边界，再展示资源。主方法只有在 `Quality Protection Feasible = Yes` 时才允许进入资源比较并形成总体资源优化结论；分预算资源差异仍完整报告。
 
 ### 25.2 分数据集质量与 Readiness 表
 
@@ -1401,10 +1421,16 @@ A2A Exchanges/Paper
 
 ```text
 Policy Package ID
-All-Budgets Quality Feasible
-Tight Gate Status
-Medium Gate Status
-Loose Gate Status
+All-Budgets Reference Admission Feasible
+Tight Reference Gate Status
+Medium Reference Gate Status
+Loose Reference Gate Status
+Quality Champion
+Quality Champion Selection Key
+All-Budgets Quality Protection Feasible
+Tight Champion Gate Status
+Medium Champion Gate Status
+Loose Champion Gate Status
 Mean-Budget Cost/Paper
 Mean-Budget Elapsed Time/Paper
 Mean-Budget Agent Calls/Paper
@@ -1486,7 +1512,7 @@ outputs/runs/<run_id>/
 
 `calibration_package_manifest.jsonl` 每行只对应一个冻结 checkpoint，记录其 STOP 边界或 calibration failure 以及相关环境 hash，不得包含跨 checkpoint 最终排名；`checkpoint_selection.csv` 只能由 Dev selector 产生。
 
-`quality_protocol_manifest.json` 至少记录 Gate Error 规则、Severe/Extreme 阈值、Unsafe Stop 分母、QWK 分档与固定 labels、QWK readiness、Bootstrap 参数、Dev 选择顺序以及实现代码 hash。
+`quality_protocol_manifest.json` 至少记录 Gate Error 规则、Severe/Extreme 阈值、Unsafe Stop 分母、QWK 分档与固定 labels、QWK readiness、Bootstrap 参数、固定参考准入门、Quality Champion 质量选择键、候选对冠军保护门、资源词典序以及实现代码 hash。
 
 所有论文表格和图必须能够从保存的 predictions、logs、configs、external/internal manifests、Calibration Package 和 Bootstrap 产物重新计算；不得只保存最终均值或手工整理后的表格。
 
@@ -1530,7 +1556,7 @@ Pilot 门禁通过后冻结 Formal Agent、Prompt、解析、成本定义和 con
 
 ### 阶段7：Per-Checkpoint Calibration 与 Dev 最终选择
 
-对阶段6产生的每个冻结 checkpoint，使用同一预注册程序在 `train_calibration` 上自动产生唯一 STOP 安全概率边界或 calibration failure，并组装 Calibration Package；calibration 不进行跨 checkpoint 排名。随后 Dev 只比较边界已冻结的完整 Package：在 Tight/Medium/Loose 各档执行 Paper 级配对 Bootstrap 质量门，任一档失败即淘汰整个 Package；仅在全预算质量可行候选中按跨预算等权资源词典序选择唯一 checkpoint，并生成 freeze manifest。
+对阶段6产生的每个冻结 checkpoint，使用同一预注册程序在 `train_calibration` 上自动产生唯一 STOP 安全概率边界或 calibration failure，并组装 Calibration Package；calibration 不进行跨 checkpoint 排名。随后 Dev 只比较边界已冻结的完整 Package：先在 Tight/Medium/Loose 各档执行相对于固定参考策略的准入门，再从全部准入候选中自动确定 Quality Champion，并淘汰任何不能在四项质量指标上证明不劣于冠军的候选；最后仅在质量保护可行候选中按跨预算等权资源词典序选择唯一 checkpoint，并生成 freeze manifest。
 
 ### 阶段8：Test Final Evaluation
 
@@ -1545,7 +1571,7 @@ Pilot 门禁通过后冻结 Formal Agent、Prompt、解析、成本定义和 con
 3. connected-component 分配求解器、strict Paper builder 的确定性实现及并列处理细节；这些实现不得改变“component完整性优先、目标约80%/20%、两边分别重建”的冻结原则；
 4. Stop-Risk 概率校准算法、候选边界生成和覆盖率约束的具体实现；
 5. Formal calibration Paper 资源分位数与 Tight/Medium/Loose 预算生成的固定规则；
-6. 固定级联、完整多 Agent 工作流等参考候选的精确动作语义；
+6. 完整多 Agent 工作流等保留参考候选的精确动作语义；
 7. 最小三头架构是否增加独立 Quality Critic；
 8. 资源指标数值精度、排序序列化和同值比较的工程实现。
 
@@ -1562,7 +1588,7 @@ Pilot 门禁通过后冻结 Formal Agent、Prompt、解析、成本定义和 con
 - Macro-NMAE；
 - 固定0～10共11档 Macro-QWK 与 readiness 条件；
 - Paper 级配对 Bootstrap 的5000次、单侧95%、零非劣效界和种子 `20260729`；
-- 四项质量门边界，以及全预算质量可行后 Dev 跨预算资源词典序。
+- 四项零边界质量门、Quality Champion 的固定质量词典序、候选对冠军质量保护门，以及质量保护可行后 Dev 跨预算资源词典序。
 
 所有尚未冻结内容必须写入配置、任务和 manifest，不能人工依据主实验结果调整。内部拆分实际比例、Paper数量和leftover数量属于确定性构建结果，不是看到 Router 结果后可以重新选择的超参数。
 
@@ -1590,4 +1616,4 @@ Stop-Risk Head 在 `train_fit` 学习不安全停止风险，每个冻结 checkp
 
 ## 30. 最终论文方法一句话
 
-> **本文提出 A2A-DyGrade-RL，一种面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法。现有 train 主路由作答先按 prompt/exact-answer/leakage 传递连通分量确定性划分为 `train_fit` 与 `train_calibration`，再在两个内部 split 中分别重建固定5题 strict 模拟试卷，禁止直接切分已有 train Paper。系统冻结评分 Agent，不训练评分模型；CAG-CQL Router 仅在 `train_fit` 学习下一 Item、评分、核验、二评、A2A、仲裁和停止等长期序列决策，每个冻结 checkpoint 只在 `train_calibration` 自动固定 STOP 安全概率边界并组装完整 Package，Dev 才对边界冻结 Package 执行全预算零容忍配对统计质量门，并在质量可行候选中按跨预算等权资源消耗选择唯一 checkpoint。完成选择后，模型、Prompt、边界、预算、质量门和 checkpoint 全部冻结，Test 仅用于一次性最终评价。**
+> **本文提出 A2A-DyGrade-RL，一种面向模拟试卷级自动阅卷的质量约束多智能体动态路由方法。现有 train 主路由作答先按 prompt/exact-answer/leakage 传递连通分量确定性划分为 `train_fit` 与 `train_calibration`，再在两个内部 split 中分别重建固定5题 strict 模拟试卷，禁止直接切分已有 train Paper。系统冻结评分 Agent，不训练评分模型；CAG-CQL Router 仅在 `train_fit` 学习下一 Item、评分、核验、二评、A2A、仲裁和停止等长期序列决策，每个冻结 checkpoint 只在 `train_calibration` 自动固定 STOP 安全概率边界并组装完整 Package，Dev 才对边界冻结 Package 先执行相对于固定参考策略的全预算零容忍准入门，再自动确定 Quality Champion，并要求其他候选证明四项质量均不劣于冠军；只有通过质量保护门的候选才按跨预算等权资源消耗选择唯一 checkpoint。完成选择后，模型、Prompt、边界、预算、质量门和 checkpoint 全部冻结，Test 仅用于一次性最终评价。**

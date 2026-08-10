@@ -1,8 +1,8 @@
-# 任务清单：面向模拟试卷级自动阅卷的质量约束 A2A-DyGrade-RL 实验流水线
+﻿# 任务清单：面向模拟试卷级自动阅卷的质量约束 A2A-DyGrade-RL 实验流水线
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
-**同步版本**：V1.4 最终职责分离、先按题目组拆 Item 后分别重建内部 Paper，并继承 V1.3 正式质量协议（2026-07-29）
+**同步版本**：V1.4 最终职责分离、内部 Paper 重建、Quality Champion 质量保护、精简 Baseline，并继承 V1.3 正式质量协议（2026-07-29）
 
 **前置文档**：plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 
@@ -119,7 +119,7 @@
 
 ### 已完成追加修复
 
-- [X] T072 [US2] 修复 `src/a2a_dygrade_rl/agents/cache.py` 的失败缓存断点续跑语义：`--resume` 仅复用 `status=success` 的合法记录，对已有失败记录重新执行，重建失败日志并补充瞬时失败后 resume 成功的集成测试
+- [X] T072 [US2] 修复 `src/a2a_dygrade_rl/agents/cache.py` 的失败缓存断点续跑语义：`--resume` 仅复用 `status=success` 的合法记录，对已有失败记录重新执行；成功续跑只能清除 active failure，历史失败快照必须继续保留，补充瞬时失败后 resume 成功且 failure history 不被删除的集成测试
 
 ---
 
@@ -127,33 +127,42 @@
 
 **目标**：先从当前27,375条 train 主路由 Item 按 prompt/exact-answer/leakage 传递连通分量划分，再分别重建 `train_fit/train_calibration` strict Paper；实现 V1.3 质量协议和 V1.4 职责门禁，完成用户批准的真实 Agent Pilot 与 Formal cache，为后续 train_fit-only Router 训练提供可信数据。
 
-**独立测试**：使用 fixture Item 完成 component 原子分配、两个 split 的 strict Paper 重建、内部 leakage audit、正式质量指标、per-checkpoint STOP 校准、Calibration Package 和 Dev-only selector；验证 calibration 不训练参数、不进入 replay、不跨 checkpoint 排名。
+**独立测试**：使用 fixture Item 完成 component 原子分配、两个 split 的 strict Paper 重建、内部 leakage audit、正式质量指标、per-checkpoint STOP 校准、Calibration Package，以及 Dev 的固定参考准入、Quality Champion 保护和资源 selector；验证 calibration 不训练参数、不进入 replay、不跨 checkpoint 排名。
 
 ### 用户故事 3A 的测试
 
-- [ ] T043 [P] [US3] 在 `tests/unit/test_internal_split.py` 中添加 V1.4 Item-level component 拆分测试：输入仅限当前27,375条 train 主路由 Item，以 `dataset+prompt_group` 与 exact-answer/leakage component 的传递连通分量为原子，覆盖目标80/20、确定性、group不跨 split、旧 `paper_train_*` 不作为分配单元、manifest 字段和拒绝 dev/test
-- [ ] T043A [P] [US3] 在 `tests/unit/test_capability_profile.py` 中添加能力画像 `train_fit` 拟合、`train_calibration` 仅自动校准支持度边界、拒绝 dev/test、无 Item 级 oracle 标签和重复运行一致性测试
-- [ ] T043B [P] [US3] 在 `tests/integration/test_internal_paper_rebuild.py` 中添加分别重建 `papers_train_fit.jsonl/papers_train_calibration.jsonl` 的测试，覆盖新 paper ID、固定5题、strict mix、仅引用本 split Item、Item不重复、leftover可追踪、内部 Item/Prompt/Component/Paper overlap=0，以及直接拆旧 train Paper 必须失败
+- [X] T043 [P] [US3] 在 `tests/unit/test_internal_split.py` 中添加 V1.4 Item-level component 拆分测试：输入仅限当前27,375条 train 主路由 Item，以 `dataset+prompt_group` 与 exact-answer/leakage component 的传递连通分量为原子，覆盖目标80/20、确定性、group不跨 split、旧 `paper_train_*` 不作为分配单元、manifest 字段和拒绝 dev/test
+- [X] T043A [P] [US3] 在 `tests/unit/test_capability_profile.py` 中添加能力画像 `train_fit` 拟合、`train_calibration` 仅自动校准支持度边界、拒绝 dev/test、无 Item 级 oracle 标签和重复运行一致性测试
+- [X] T043B [P] [US3] 在 `tests/integration/test_internal_paper_rebuild.py` 中添加分别重建 `papers_train_fit.jsonl/papers_train_calibration.jsonl` 的测试，覆盖新 paper ID、固定5题、strict mix、仅引用本 split Item、Item不重复、leftover可追踪、内部 Item/Prompt/Component/Paper overlap=0，以及直接拆旧 train Paper 必须失败
 - [ ] T044 [P] [US3] 在 `tests/unit/test_hidden_cache_env.py` 和 `tests/unit/test_action_mask.py` 中添加未调用 cache 隐藏、结构动作掩码、四维预算掩码、support catalog 外/缺失 active cache 动作屏蔽、无分数禁止 STOP、单意见禁止 ARBITRATE 和禁止在线补算测试
-- [ ] T045 [P] [US3] 在 `tests/unit/test_quality_constraints.py`、`tests/unit/test_calibration.py` 和 `tests/unit/test_checkpoint_selector.py` 中添加职责分离测试：calibration 对每个冻结 checkpoint 只输出 STOP 边界或 failure，禁止梯度/replay/跨 checkpoint 排名/最终选择/主方法升级阈值；Dev 只比较边界冻结 Package，执行全预算质量门和跨预算资源词典序并输出唯一 checkpoint
-- [ ] T045A [US3] 在 `tests/integration/test_quality_constrained_smoke.py` 中添加 `item component split -> separate paper rebuild -> train_fit candidate checkpoint -> train_calibration STOP boundary/package -> Dev fixed-package gate/select -> freeze -> test-like` 端到端 smoke，验证 calibration 不排名、Dev 不改边界、任一预算失败淘汰整个 Package、相同种子输出唯一 checkpoint
-- [ ] T045B [P] [US3] 在 `tests/unit/test_quality_protocol_v13.py`、`tests/unit/test_qwk_readiness.py` 和 `tests/unit/test_paired_bootstrap_gate.py` 中添加 Gate Error 非法/Deferral=1、Severe >0.25、Extreme >=0.50、Unsafe Stop 分母与零 STOP=NA、Macro-NMAE、half-up `0..10` 共11档完整 labels、QWK readiness、Paper 配对5000次单侧95%零界、置信区间跨0失败及固定种子可重复测试
+- [X] T045 [P] [US3] 在 `tests/unit/test_quality_constraints.py`、`tests/unit/test_calibration.py` 和 `tests/unit/test_checkpoint_selector.py` 中添加职责分离与质量保护测试：calibration 对每个冻结 checkpoint 只输出 STOP 边界或 failure，禁止梯度/replay/跨 checkpoint 排名/最终选择/主方法升级阈值；Dev 必须先执行全预算固定参考准入门，再只按质量指标确定唯一 Quality Champion，对其他候选执行全预算冠军保护门，最后仅在保护可行候选中按资源词典序输出唯一 checkpoint
+- [X] T045A [US3] 在 `tests/integration/test_quality_constrained_smoke.py` 中添加 `item component split -> separate paper rebuild -> fixture cache -> train_fit fixture candidate checkpoint -> train_calibration reference/budget/support/STOP boundary/package -> Dev fixed-reference admission -> Quality Champion -> candidate-to-champion protection -> resource select -> freeze -> test-like one-shot` 端到端 smoke，验证 calibration 不排名、Dev 不改边界、任一参考准入失败或预算不可行均淘汰整个 Package、资源更低但质量不能证明不劣于冠军的候选被淘汰、冻结 STOP 边界实际触发验证动作、Arbitrator A2A 资源被计数、相同种子输出同一参考映射/边界/冠军/保护集合/唯一 checkpoint，并验证全部禁止行为计数和 artifact inventory 未覆盖数为0
+- [X] T045C [US3] 在 `spec.md`、`plan.md`、`contracts/artifact-schemas.md`、`contracts/cli-contract.md`、`configs/experiments/fixture_smoke.yaml` 和 `tests/fixtures/quality_constrained_smoke/` 中冻结 Fixture Smoke 隔离与复用契约：专用输入/config/test/run 位置、`formal_eligible=false`、禁止写入正式 data/cache/checkpoint/论文结果、禁止在线 Agent、正式 loader fail closed、核心业务模块不得分叉、source path/正式入口探针和逐文件 artifact inventory，并完成实现前契约审核
+- [X] T045D [US3] 使用 `speckit-review-code`、`speckit-review-tests`、`speckit-review-errors`、`speckit-verify-run` 和 `speckit-verify-tasks-run` 对补充后的 Fixture Smoke 测试契约与实现执行实现后审核；必须保留预算不可行、NaN/重复安全证据、失败 cache 历史、路径越界、Formal loader 误接受、STOP 边界未应用、A2A 未计数、确定性不完整和 artifact inventory 漏项等反例证据，并输出 `outputs/runs/<fixture_run_id>/reports/fixture_smoke_implementation_review.md`
+- [X] T045B [P] [US3] 在 `tests/unit/test_quality_protocol_v13.py`、`tests/unit/test_qwk_readiness.py` 和 `tests/unit/test_paired_bootstrap_gate.py` 中添加 Gate Error 非法/Deferral=1、Severe >0.25、Extreme >=0.50、Unsafe Stop 分母与零 STOP=NA、Macro-NMAE、half-up `0..10` 共11档完整 labels、QWK readiness、Paper 配对5000次单侧95%零界、置信区间跨0失败及固定种子可重复测试
 
 ### 用户故事 3A 的实现
 
-- [ ] T046 [P] [US3] 在 `src/a2a_dygrade_rl/datasets/internal_split.py` 和 `scripts/04a_build_internal_split.py` 中实现 V1.4 Item-level internal split：读取当前 train `paper_manifest.csv` 引用的27,375条 Item，构造 prompt/exact-answer connected components，按固定种子和目标80/20确定性分配，优先保持component完整、三数据集覆盖与strict Paper可构造性，输出 `data/processed/internal_item_split_manifest.csv` 和实际比例/偏差
-- [ ] T046A [US3] 在 `src/a2a_dygrade_rl/datasets/build_internal_papers.py`、`src/a2a_dygrade_rl/datasets/audit_internal_split.py` 和 `scripts/04c_build_internal_papers.py` 中分别从两个内部 Item 池重建固定5题 strict Paper，将 `papers_train_fit.jsonl`、`papers_train_calibration.jsonl`、`internal_paper_manifest.csv` 和 `leftover_items.csv` 写入 `data/processed/`，并将 `internal_split_audit.md` 写入对应 run 的 `reports/`；拒绝跨 split 借题、重复 Item、旧 paper ID 继承、泄漏和 strict mix 违规
-- [ ] T047 [P] [US3] 在 `src/a2a_dygrade_rl/utils/schemas.py`、`src/a2a_dygrade_rl/utils/validation.py`、`configs/dataset.yaml`、`configs/router.yaml`、`configs/cag_cql.yaml` 和 `configs/quality_protocol.yaml` 中扩展 InternalItemSplitManifest、InternalPaperManifest、LeftoverRecord、CalibrationPackage、PolicyPackage、QualityMetricProtocol、QWKReadinessRecord、PairedBootstrapGateResult、QualityReference/Budget/Freeze manifests；加入目标约80/20及优先级、禁止直接拆旧Paper、calibration_no_gradient/no_replay/no_checkpoint_ranking、Dev boundary immutable 和协议 hash 校验
-- [ ] T048 [P] [US3] 在 `src/a2a_dygrade_rl/agents/cache.py` 和 `scripts/03_run_agent_cache.py` 中实现以 `internal_item_split_manifest.csv` 为 train 侧 Formal cache split 来源、以外部 manifests 为 Dev/Test 来源；拒绝根据旧 `paper_train_*` 推断内部 split，冻结有限 `context_support_catalog.json`、范围/目录指纹，并为 Arbitrator 强制绑定仅含已暴露意见的 `context_hash`
-- [ ] T063C [US3] 在新建的 `src/a2a_dygrade_rl/evaluation/quality_protocol.py`、`qwk_readiness.py` 以及现有 `metrics_safety.py`、`metrics_quality.py`、`metrics_budget.py` 和 `failure_registry.py` 中实现 Gate Error 非法/Deferral=1、Severe/Extreme、Unsafe Stop 与零 STOP=NA、Macro/Micro-NMAE、half-up 固定 `0..10` 共11档完整 labels QWK、readiness、Budget Exhaustion、Deferral 和失败保留；修复当前按实际标签 union 计算 QWK 的实现
-- [ ] T063E [US3] 在新建的 `src/a2a_dygrade_rl/evaluation/paired_bootstrap.py` 和 `statistical_gate.py` 中实现以 Paper 为 cluster、候选/参考配对、5000次、单侧95%、零非劣效界、固定种子 `20260729` 的 Bootstrap，计算 Severe/Unsafe 最坏数据集差值、Macro-NMAE/QWK 差值及 UCB/LCB；任一指标未定义或置信区间跨0时输出 `quality_noninferiority_inconclusive`，并保存逐次或可重建的重采样产物
-- [ ] T049 [P] [US3] 在 `src/a2a_dygrade_rl/rl/quality_reference.py` 中实现预定义 reference policies 按预算档位的 train_calibration 自动选择：先要求指标/STOP/QWK readiness，再按 Worst-Dataset Severe、Worst-Dataset Unsafe Stop、Macro-NMAE、Macro-QWK、资源和 Policy ID 固定顺序选择，输出全部参考候选及 `budget_id -> reference_policy_id` 的 `quality_reference_manifest.json`；此任务只确定质量门参考，不读取或排名 Router checkpoint
-- [ ] T050 [P] [US3] 在 `src/a2a_dygrade_rl/rl/budget_calibration.py` 中仅使用重建后的 Formal `paper_train_calibration_*` 和固定 behavior/reference policies 统计 Paper 级四维资源分布，按预注册分位数生成 Tight/Medium/Loose 并输出含 internal manifest hash 的 `budget_calibration_manifest.json`；Pilot 分位数不得充当正式预算
-- [ ] T050A [P] [US3] 在 `src/a2a_dygrade_rl/agents/capability.py` 和 `scripts/04b_build_capability_profiles.py` 中实现 Formal 能力画像：只用 `train_fit` 拟合画像统计，`train_calibration` 仅按预注册程序校准 low-support/uncertainty 边界，保存输入 split、支持度、算法和指纹 manifest
-- [ ] T051 [P] [US3] 在 `src/a2a_dygrade_rl/router/stop_risk_head.py` 和 `src/a2a_dygrade_rl/rl/calibration.py` 中实现基于 `Gate Error > 0.25` 的 train_fit Stop-Risk 训练接口，以及对每个冻结 checkpoint 在 `paper_train_calibration_*` 上独立校准唯一 STOP 安全概率边界；禁止参数更新、replay写入、跨checkpoint排名、最终选择和主方法升级阈值，Dev不得移动边界
-- [ ] T052 [US3] 在 `src/a2a_dygrade_rl/rl/policy_package.py` 中实现 Calibration Package builder：每个固定 checkpoint 只打包其 STOP 边界或 calibration failure、参考映射、预算、support/quality/internal manifest hashes，输出 `calibration_package_manifest.jsonl`；schema 禁止跨 checkpoint Dev rank、`selected_final_router` 和资源冠军字段
-- [ ] T052A [US3] 在 `configs/agents.yaml`、`prompts/*.txt` 和 `src/a2a_dygrade_rl/utils/llm_client.py` 中准备真实 Agent provider-neutral 配置、严格 JSON 输出和请求权限；任何 SDK、权重、API 或联网调用须先获得用户批准并记录 D 盘路径与费用上限
+- [X] T046 [P] [US3] 在 `src/a2a_dygrade_rl/datasets/internal_split.py` 和 `scripts/04a_build_internal_split.py` 中实现 V1.4 Item-level internal split：读取当前 train `paper_manifest.csv` 引用的27,375条 Item，构造 prompt/exact-answer connected components，按固定种子和目标80/20确定性分配，优先保持component完整、三数据集覆盖与strict Paper可构造性，输出 `data/processed/internal_item_split_manifest.csv` 和实际比例/偏差
+- [X] T046A [US3] 在 `src/a2a_dygrade_rl/datasets/build_internal_papers.py`、`src/a2a_dygrade_rl/datasets/audit_internal_split.py` 和 `scripts/04c_build_internal_papers.py` 中分别从两个内部 Item 池重建固定5题 strict Paper，将 `papers_train_fit.jsonl`、`papers_train_calibration.jsonl`、`internal_paper_manifest.csv` 和 `leftover_items.csv` 写入 `data/processed/`，并将 `internal_split_audit.md` 写入对应 run 的 `reports/`；拒绝跨 split 借题、重复 Item、旧 paper ID 继承、泄漏和 strict mix 违规
+- [X] T047 [P] [US3] 在 `src/a2a_dygrade_rl/utils/schemas.py`、`src/a2a_dygrade_rl/utils/validation.py`、`configs/dataset.yaml`、`configs/router.yaml`、`configs/cag_cql.yaml` 和 `configs/quality_protocol.yaml` 中扩展 InternalItemSplitManifest、InternalPaperManifest、LeftoverRecord、CalibrationPackage、PolicyPackage、QualityMetricProtocol、QWKReadinessRecord、PairedBootstrapGateResult、QualityReference/Budget/QualityChampion/QualityProtection/Freeze manifests；加入目标约80/20及优先级、禁止直接拆旧Paper、calibration_no_gradient/no_replay/no_checkpoint_ranking、Dev boundary immutable、quality_champion_no_resource、candidate_to_champion_gate 和协议 hash 校验
+- [X] T048 [P] [US3] 在 `src/a2a_dygrade_rl/agents/cache.py` 和 `scripts/03_run_agent_cache.py` 中实现以 `internal_item_split_manifest.csv` 为 train 侧 Formal cache split 来源、以外部 manifests 为 Dev/Test 来源；拒绝根据旧 `paper_train_*` 推断内部 split，冻结有限 `context_support_catalog.json`、范围/目录指纹，并为 Arbitrator 强制绑定仅含已暴露意见的 `context_hash`
+- [X] T063C [US3] 在新建的 `src/a2a_dygrade_rl/evaluation/quality_protocol.py`、`qwk_readiness.py` 以及现有 `metrics_safety.py`、`metrics_quality.py`、`metrics_budget.py` 和 `failure_registry.py` 中实现 Gate Error 非法/Deferral=1、Severe/Extreme、Unsafe Stop 与零 STOP=NA、Macro/Micro-NMAE、half-up 固定 `0..10` 共11档完整 labels QWK、readiness、Budget Exhaustion、Deferral 和失败保留；修复当前按实际标签 union 计算 QWK 的实现
+- [X] T063E [US3] 在新建的 `src/a2a_dygrade_rl/evaluation/paired_bootstrap.py` 和 `statistical_gate.py` 中实现以 Paper 为 cluster、候选/比较基准配对、5000次、单侧95%、零非劣效界、固定种子 `20260729` 的通用 Bootstrap，支持固定参考准入门与 Quality Champion 保护门，计算 Severe/Unsafe 最坏数据集差值、Macro-NMAE/QWK 差值及 UCB/LCB；任一指标未定义或置信区间跨0时输出 `quality_noninferiority_inconclusive`，并保存逐次或可重建的重采样产物
+- [X] T049 [P] [US3] 在 `src/a2a_dygrade_rl/rl/quality_reference.py` 中实现预定义 reference policies（Always-Cheap、Always-Mid、Always-Strong、Fixed Full Multi-Agent Workflow）按预算档位的 train_calibration 自动选择：先要求指标/STOP/QWK readiness，再按 Worst-Dataset Severe、Worst-Dataset Unsafe Stop、Macro-NMAE、Macro-QWK、资源和 Policy ID 固定顺序选择，输出全部参考候选及 `budget_id -> reference_policy_id` 的 `quality_reference_manifest.json`；此任务只确定质量门参考，不读取或排名 Router checkpoint
+- [X] T050 [P] [US3] 在 `src/a2a_dygrade_rl/rl/budget_calibration.py` 中仅使用重建后的 Formal `paper_train_calibration_*` 和固定 behavior/reference policies 统计 Paper 级四维资源分布，按预注册分位数生成 Tight/Medium/Loose 并输出含 internal manifest hash 的 `budget_calibration_manifest.json`；Pilot 分位数不得充当正式预算
+- [X] T050A [P] [US3] 在 `src/a2a_dygrade_rl/agents/capability.py` 和 `scripts/04b_build_capability_profiles.py` 中实现 Formal 能力画像：只用 `train_fit` 拟合画像统计，`train_calibration` 仅按预注册程序校准 low-support/uncertainty 边界，保存输入 split、支持度、算法和指纹 manifest
+- [X] T051 [P] [US3] 在 `src/a2a_dygrade_rl/router/stop_risk_head.py` 和 `src/a2a_dygrade_rl/rl/calibration.py` 中实现基于 `Gate Error > 0.25` 的 train_fit Stop-Risk 训练接口，以及对每个冻结 checkpoint 在 `paper_train_calibration_*` 上独立校准唯一 STOP 安全概率边界；禁止参数更新、replay写入、跨checkpoint排名、最终选择和主方法升级阈值，Dev不得移动边界
+- [X] T052 [US3] 在 `src/a2a_dygrade_rl/rl/policy_package.py` 中实现 Calibration Package builder：每个固定 checkpoint 只打包其 STOP 边界或 calibration failure、参考映射、预算、support/quality/internal manifest hashes，输出 `calibration_package_manifest.jsonl`；schema 禁止跨 checkpoint Dev rank、`selected_final_router` 和资源冠军字段
+- [X] T052A [US3] 在 `configs/agents.yaml`、`prompts/*.txt` 和 `src/a2a_dygrade_rl/utils/llm_client.py` 中准备真实 Agent provider-neutral 配置、严格 JSON 输出和请求权限；任何 SDK、权重、API 或联网调用须先获得用户批准并记录 D 盘路径与费用上限
+- [X] T052A1 [P] [US3] 在 `src/a2a_dygrade_rl/agents/pricing.py`、`src/a2a_dygrade_rl/utils/validation.py` 和 `tests/unit/test_real_agent_pricing.py` 中实现上游 usage 明细、缓存读写、reasoning 不重复计费、冻结官方 Standard API 价格、模型静默替换拒绝及调用/75 USD硬门
+- [X] T052A2 [P] [US3] 在 `configs/experiments/real_pilot_cliproxy_gpt56.yaml`、`configs/pricing/openai_standard_20260730.yaml` 和 `prompts/real_pilot_v1/*.txt` 中冻结 Luna/Terra/Sol 五类Agent、8种候选Arbitrator context、严格JSON、并发/重试/超时与Prompt hash
+- [X] T052A3 [US3] 在 `src/a2a_dygrade_rl/agents/cache.py`、`scripts/03_run_agent_cache.py`、`src/a2a_dygrade_rl/agents/pilot.py` 和 `scripts/05_prepare_real_agent_pilot.py` 中实现20份strict Paper固定样本、5/20/100同run checkpoint/resume、细分token审计和Pilot bootstrap隔离
+- [ ] T052B0 [US3] 使用 `scripts/06_probe_cliproxy_models.py` 验证CLIProxy模型目录及实际响应分别为 `gpt-5.6-luna/terra/sol`；任何静默回退、usage缺失、认证不可用或代理错误均阻塞100 Item调用并保留独立run证据
 - [ ] T052B [US3] 在用户批准后从 V1.4 重建的完整 strict `paper_train_fit_*` 抽取约100个 Item（约20份5题 Paper）运行 `real_pilot_<run_id>`，审计 JSON 成功率、分数越界、Agent 互补性、Evidence/Arbitrator 增益、context catalog 规模、实际 token/cost/elapsed time/calls/exchanges，并生成是否允许进入 Formal cache 的门禁报告；Pilot 分位数不直接作为正式预算
+- [ ] T052B1 [US3] 在模型身份门通过后，对同一100 Item完整生成4类基础Agent与8种候选Arbitrator context共1,200条成功记录；5/20 Item仅作协议、成本、配额和稳定性停止门，最多120次重试，总调用不超过1,320且API成本不超过75 USD
+- [ ] T052B2 [US3] 在 `src/a2a_dygrade_rl/agents/pilot_analysis.py` 和对应报告脚本中按协议资格、Severe/Extreme、Macro/Micro-NMAE、可用时QWK、累计成本/延迟/calls/exchanges、分歧子集增益及可达状态Pareto关系比较8种context，输出建议但不自动冻结Formal catalog
+- [ ] T052B3 [US3] 100 Item报告完成后停止并提交用户审批；本阶段明确不运行1,000 Item耐久测试、不生成Formal cache、不读取Dev/Test，是否扩大规模由用户另行决定
 - [ ] T052C [US3] 在 Pilot 门禁通过且 Formal Agent/Prompt/解析/成本配置与 context support catalog 冻结后，按 V1.4 internal item manifest 生成独立 `formal_agent_cache_<run_id>` 的 train_fit/train_calibration cache，并按外部 manifest 生成 Dev cache；Test cache 推迟到最终 freeze，Pilot active cache 不得复制或晋升
 - [ ] T052D [US3] 在 T052C 后仅用 Formal train_fit cache 拟合能力画像主体，仅用 Formal train_calibration rebuilt Paper/cache 冻结支持度边界、质量参考和预算，生成并审计 `agent_capability_manifest.json`、`quality_reference_manifest.json`、`budget_calibration_manifest.json`；此任务不校准 checkpoint、不选择最终 Router，拒绝 Dev/Test
 
@@ -163,9 +172,9 @@
 
 ## Phase 6：用户故事 3B：质量约束 CAG-CQL Router 与公平评价（优先级：P3）
 
-**目标**：在隐藏 cache 的多题共享资源环境中，只用 train_fit 训练带 Stop-Risk Head 的质量约束 CAG-CQL；随后对候选 checkpoint 执行独立 calibration Package 构建和 Dev-only 选择，并与强分类、Bandit、greedy 和 knapsack baseline 公平比较。
+**目标**：在隐藏 cache 的多题共享资源环境中，只用 train_fit 训练带 Stop-Risk Head 的质量约束 CAG-CQL；随后对候选 checkpoint 执行独立 calibration Package 构建，以及 Dev 的固定参考准入、Quality Champion 保护和资源选择，并与强分类、Bandit 和 knapsack baseline 公平比较。
 
-**独立测试**：运行 `train_fit candidate checkpoints -> train_calibration STOP boundary/package -> Dev fixed-package gate/select -> report` smoke，验证训练、校准和最终选择的数据职责完全分离，并生成每预算档位四项配对统计质量门、QWK/STOP readiness、跨预算资源排序、唯一 Policy Package/checkpoint、消融表和失败注册表。
+**独立测试**：运行 `train_fit candidate checkpoints -> train_calibration STOP boundary/package -> Dev fixed-reference admission -> Quality Champion -> candidate-to-champion protection -> resource select -> report` smoke，验证训练、校准和最终选择的数据职责完全分离，并生成参考准入门、冠军保护门、QWK/STOP readiness、跨预算资源排序、唯一 Policy Package/checkpoint、消融表和失败注册表。
 
 ### 用户故事 3B 的测试
 
@@ -182,13 +191,13 @@
 - [ ] T060 [US3] 在 `src/a2a_dygrade_rl/rl/trajectory_builder.py`、`replay_buffer.py` 和 `scripts/05_build_trajectories.py` 中仅从 V1.4 重建的 `paper_train_fit_*` 与 train_fit hidden cache 构建 behavior trajectories、STOP 风险标签、A2A/仲裁轨迹、预算条件轨迹和 replay buffer；loader 必须拒绝 calibration/dev/test Paper 或 cache
 - [ ] T061 [US3] 在 `src/a2a_dygrade_rl/router/q_network.py`、`target_network.py`、`resource_critic.py` 和 `cag_cql_policy.py` 中实现 Double Q、Target Network、Routing Q Head、Resource Critic、Stop-Risk Head 接入和 Masked Conservative Penalty
 - [ ] T062 [US3] 在 `src/a2a_dygrade_rl/rl/quality_constraints.py`、`train_cag_cql.py` 和 `scripts/06_train_cag_cql.py` 中仅用 train_fit replay 实现单一预算条件质量约束离线训练，输出预注册范围内候选 checkpoint、训练曲线和 `candidate_checkpoint_manifest.json`；本任务不得读取 calibration/dev/test，不得校准 STOP 边界、组装最终 Package、执行 Dev 排名或 freeze，也不得以手工 `QWK-beta*Cost` 权重选择模型或为不同预算训练后挑不同 checkpoint
-- [ ] T052E [US3] 在 `src/a2a_dygrade_rl/rl/checkpoint_selector.py` 中实现 Dev-only selector：拒绝未冻结边界或缺失 manifest/hash 的 Package，在 Tight/Medium/Loose 各档执行质量门，淘汰任一预算失败候选，只对全预算质量可行 Package 计算跨预算等权资源键并按冻结词典序输出唯一 `checkpoint_selection.csv` 与 `policy_freeze_manifest.json`；禁止移动边界，相同输入重复运行必须一致
-- [ ] T063 [P] [US3] 在 `src/a2a_dygrade_rl/baselines/fixed_agents.py`、`calibrated_threshold.py`、`static_classifier.py` 和 `fixed_cascade.py` 中实现固定 Agent、自动校准阈值、静态分类器、固定级联和完整多 Agent baseline；阈值 baseline 只可在 train_calibration 按预注册算法自动校准并在 Dev 前冻结，主方法的升级动作不得复用这些阈值
-- [ ] T063A [P] [US3] 在 `src/a2a_dygrade_rl/baselines/contextual_bandit.py`、`myopic_router.py`、`greedy_router.py` 和 `knapsack_router.py` 中实现非 RL 强 baseline，所有方法共享同一隐藏 cache 环境与预算
-- [ ] T063B [US3] 在 `src/a2a_dygrade_rl/rl/evaluate_policy.py`、`scripts/07_eval_baselines.py` 和 `scripts/08_eval_ablation.py` 中编排正式职责链：对 T062 候选 checkpoint 调用 T051/T052，仅用 train_calibration 生成 STOP 边界或 failure 与 Calibration Package；再对边界冻结 Package、参考、baseline 和消融在 Dev 的同 Paper/同 cache/同预算上调用正式指标、QWK/STOP readiness 与 Paper Bootstrap Gate，并交给 T052E 产生唯一选择；任何未定义或 inconclusive 结果必须判为质量不可行，且记录 calibration 无排名、Dev 无边界修改审计
-- [ ] T063D [US3] 在 `src/a2a_dygrade_rl/evaluation/report_tables.py`、`plot_cost_qwk_curve.py`、`case_study.py` 和 `scripts/09_plot_cost_qwk_curve.py` 中生成含 internal manifest、calibration boundary/failure、Dev selector 状态、每预算质量可行、Package 全预算质量可行、四项统计边界、QWK/STOP readiness、Stop Coverage、Deferral 和资源指标的主表、分数据集表、消融表、预算前沿、失败注册表及成功/失败 case study；只有质量可行方法报告资源节省
+- [X] T052E [US3] 在 `src/a2a_dygrade_rl/rl/checkpoint_selector.py` 中实现 Dev-only selector：拒绝未冻结边界或缺失 manifest/hash 的 Package；先在 Tight/Medium/Loose 各档执行候选对固定参考的准入门并淘汰任一预算失败候选，再仅在候选 Router Policy Package 中完全不使用资源指标，按跨预算 Severe、Unsafe Stop、Macro-NMAE、Macro-QWK 和 Package ID 确定唯一 Quality Champion，拒绝参考、Baseline 或消融进入冠军候选；随后对其余准入候选执行每档候选对冠军的四项零边界保护门，只对全预算保护可行 Package 计算跨预算等权资源键并输出唯一 `checkpoint_selection.csv` 与 `policy_freeze_manifest.json`；禁止移动边界或人工替换冠军，相同输入重复运行必须一致
+- [ ] T063 [P] [US3] 在 `src/a2a_dygrade_rl/baselines/fixed_agents.py`、`calibrated_threshold.py` 和 `static_classifier.py` 中实现 Always-Cheap、Always-Mid、Always-Strong、完整多 Agent、自动校准阈值和静态分类器 baseline；不实现 Fixed Cascade，阈值 baseline 只可在 train_calibration 按预注册算法自动校准并在 Dev 前冻结，主方法的升级动作不得复用这些阈值
+- [ ] T063A [P] [US3] 在 `src/a2a_dygrade_rl/baselines/contextual_bandit.py` 和 `knapsack_router.py` 中实现 Contextual Bandit 与 Top-k/Knapsack 非 RL 强 baseline；不实现 Per-item Myopic Router 和 Greedy Marginal Utility，所有保留方法共享同一隐藏 cache 环境与预算
+- [ ] T063B [US3] 在 `src/a2a_dygrade_rl/rl/evaluate_policy.py`、`scripts/07_eval_baselines.py` 和 `scripts/08_eval_ablation.py` 中编排正式职责链：对 T062 候选 checkpoint 调用 T051/T052，仅用 train_calibration 生成 STOP 边界或 failure 与 Calibration Package；再对边界冻结 Package、参考、保留 baseline 和消融在 Dev 的同 Paper/同 cache/同预算上调用正式指标、QWK/STOP readiness 与 T063E 通用 Bootstrap，其中只有候选 Router Policy Package 交给 T052E 依次完成固定参考准入、Quality Champion 确定、候选对冠军质量保护和资源选择，参考、Baseline 和消融仅生成比较报告；任何未定义或 inconclusive 结果必须判为对应门失败，并记录 calibration 无排名、Dev 无边界修改及冠军无人工替换审计
+- [ ] T063D [US3] 在 `src/a2a_dygrade_rl/evaluation/report_tables.py`、`plot_cost_qwk_curve.py`、`case_study.py` 和 `scripts/09_plot_cost_qwk_curve.py` 中生成含 internal manifest、calibration boundary/failure、固定参考准入状态、Quality Champion 与选择键、候选对冠军保护状态、两类四项统计边界、QWK/STOP readiness、Stop Coverage、Deferral 和资源指标的主表、分数据集表、消融表、预算前沿、失败注册表及成功/失败 case study；只有质量保护可行方法报告资源节省
 
-**检查点**：Smoke 能端到端生成可重算报告；T062 只输出候选 checkpoint，T051/T052 只在 calibration 固定边界并组装 Package，T052E 只在 Dev 选择；主方法与分类器/Bandit/greedy/knapsack 共享 internal papers、cache、预算、quality protocol、Bootstrap 和评价脚本。若无 checkpoint 在全部预算档位通过四项配对统计质量门，系统输出失败并停止资源成功声明。
+**检查点**：Smoke 能端到端生成可重算报告；T062 只输出候选 checkpoint，T051/T052 只在 calibration 固定边界并组装 Package，T052E 只在 Dev 执行参考准入、Quality Champion 保护和资源选择；主方法与分类器/Bandit/knapsack 共享 internal papers、cache、预算、quality protocol、Bootstrap 和评价脚本。若无 checkpoint 通过全部预算档位参考准入门，系统输出失败；资源更低但质量不能证明不劣于冠军的候选不得形成资源成功声明。
 
 ---
 
@@ -196,13 +205,13 @@
 
 **目的**：完成文档、正式 Test 一次性评价、产物审计和论文材料。
 
-- [ ] T064 [P] 在 `README.md` 和 `data/README.md` 中更新外部 Paper 与 V1.4 内部 Item split/重建 Paper 的区别、`train_fit/train_calibration/dev/test` 最终职责、V1.3 正式质量协议、质量可行后资源优先流程、真实数据许可和完整实验 workflow
-- [ ] T065 [P] 在 `specs/001-a2a-dygrade-rl/data-model.md`、`contracts/artifact-schemas.md`、`contracts/cli-contract.md` 和 `quickstart.md` 中同步 InternalItemSplitManifest、InternalPaperManifest、LeftoverRecord、CalibrationPackage、QualityMetricProtocol、QWKReadinessRecord、PairedBootstrapGateResult、单一预算条件 PolicyPackage、按预算参考映射、预算/STOP 校准、Stop-Risk Head、隐藏 cache、Dev-only selector 和 final-evaluation 门禁
-- [ ] T066 [P] 在 `docs/design/report-columns.md` 中添加 internal split/paper/leftover 字段、Gate Error、Severe/Extreme、Unsafe Stop/Stop Coverage/Deferral、Macro-NMAE、固定11档 QWK/readiness、四项 UCB/LCB、per-checkpoint calibration boundary/failure、Dev 资源排序和资源指标字段字典
-- [ ] T067 在 `tests/integration/test_smoke_experiment.py` 中补充 quickstart smoke、禁止直接拆旧 train Paper、内部 split/rebuild 零泄漏、calibration no-gradient/no-ranking、Dev boundary immutable、Deferral 最坏损失、零 STOP=NA、QWK undefined、CI 跨0失败、selector 重复运行一致性、测试数据拒绝训练和报告重算校验
-- [ ] T068 在唯一 Package 完成 Dev freeze 后生成隔离 test cache，校验 external/internal manifests、quality protocol/reference/budget、calibration package、STOP boundary、cache/code hashes，执行一次性 final evaluation `final_evaluation_<run_id>`，保存 `policy_freeze_manifest.json`、`qwk_readiness.csv`、`quality_gate_bootstrap.csv` 和 Test one-shot 记录；不得根据结果返回调参
-- [ ] T069 根据 `specs/001-a2a-dygrade-rl/contracts/artifact-schemas.md` 审计 internal item/paper/leftover manifests、Formal cache split、capability/reference/budget manifests、每 checkpoint calibration package、Dev-only selection、quality protocol/hash、QWK readiness、Bootstrap 重采样可重建性和 failure registry
-- [ ] T070 在 `outputs/runs/<run_id>/reports/experiment_readiness.md` 中记录外部数据审计、V1.4 component split与两套Paper重建、Agent Pilot、Formal cache、quality protocol、STOP/QWK readiness、质量参考、预算/支持度/每checkpoint STOP校准、calibration无排名审计、Dev-only选择、Test freeze 和复现门禁
+- [ ] T064 [P] 在 `README.md` 和 `data/README.md` 中更新外部 Paper 与 V1.4 内部 Item split/重建 Paper 的区别、`train_fit/train_calibration/dev/test` 最终职责、V1.3 正式质量协议、固定参考准入、Quality Champion 保护后资源选择流程、真实数据许可和完整实验 workflow
+- [ ] T065 [P] 在 `specs/001-a2a-dygrade-rl/data-model.md`、`contracts/artifact-schemas.md`、`contracts/cli-contract.md` 和 `quickstart.md` 中同步 InternalItemSplitManifest、InternalPaperManifest、LeftoverRecord、CalibrationPackage、QualityMetricProtocol、QWKReadinessRecord、PairedBootstrapGateResult、QualityChampion、QualityProtectionGateResult、单一预算条件 PolicyPackage、按预算参考映射、预算/STOP 校准、Stop-Risk Head、隐藏 cache、Dev-only selector 和 final-evaluation 门禁
+- [ ] T066 [P] 在 `docs/design/report-columns.md` 中添加 internal split/paper/leftover 字段、Gate Error、Severe/Extreme、Unsafe Stop/Stop Coverage/Deferral、Macro-NMAE、固定11档 QWK/readiness、四项 UCB/LCB、per-checkpoint calibration boundary/failure、固定参考准入、Quality Champion、候选对冠军质量保护、Dev 资源排序和资源指标字段字典
+- [ ] T067 在 `tests/integration/test_smoke_experiment.py` 中补充 quickstart smoke、禁止直接拆旧 train Paper、内部 split/rebuild 零泄漏、calibration no-gradient/no-ranking、Dev boundary immutable、Quality Champion no-resource/no-manual-replacement、资源更低但冠军保护失败必须淘汰、Deferral 最坏损失、零 STOP=NA、QWK undefined、CI 跨0失败、selector 重复运行一致性、测试数据拒绝训练和报告重算校验
+- [ ] T068 在唯一 Package 完成 Dev freeze 后生成隔离 test cache，校验 external/internal manifests、quality protocol/reference/budget、calibration package、STOP boundary、Quality Champion、质量保护结果、cache/code hashes，执行一次性 final evaluation `final_evaluation_<run_id>`，保存 `policy_freeze_manifest.json`、`qwk_readiness.csv`、`quality_gate_bootstrap.csv` 和 Test one-shot 记录；不得根据结果返回调参
+- [ ] T069 根据 `specs/001-a2a-dygrade-rl/contracts/artifact-schemas.md` 审计 internal item/paper/leftover manifests、Formal cache split、capability/reference/budget manifests、每 checkpoint calibration package、固定参考准入、Quality Champion 选择、候选对冠军保护、Dev-only resource selection、quality protocol/hash、QWK readiness、Bootstrap 重采样可重建性和 failure registry
+- [ ] T070 在 `outputs/runs/<run_id>/reports/experiment_readiness.md` 中记录外部数据审计、V1.4 component split与两套Paper重建、Agent Pilot、Formal cache、quality protocol、STOP/QWK readiness、质量参考、预算/支持度/每checkpoint STOP校准、calibration无排名审计、Dev固定参考准入、Quality Champion无资源/无人工替换审计、候选对冠军质量保护、Dev-only资源选择、Test freeze 和复现门禁
 - [ ] T071 运行完整测试套件，将命令、V1.3 指标/Bootstrap 固定种子重复性、V1.4 internal split/rebuild 确定性和 calibration/Dev 职责隔离结果写入 `outputs/runs/<run_id>/logs/test_run.log`，并在临时目录完成仓库结构规范校验后删除临时脚本与数据
 
 ---
@@ -237,12 +246,12 @@
 ### 关键任务依赖
 
 ```text
-T043/T043A/T043B/T044/T045/T045B（测试先行）
+T043/T043A/T043B/T044/T045/T045B/T045C（测试与契约先行）
 → T046/T046A/T047/T048
 → T063C（指标与readiness）
 → T063E（paired bootstrap gate）
 → T049/T050/T050A/T051/T052/T052E
-→ T045A（fixture端到端门禁）
+→ T045A（隔离的fixture端到端门禁）
 → T052A（Pilot配置，不联网）
 → 用户审批
 → T052B → T052C → T052D
@@ -267,10 +276,10 @@ T043/T043A/T043B/T044/T045/T045B（测试先行）
 
 ### 最近的可执行 MVP
 
-1. 先完成 T043、T043A、T043B、T044、T045、T045B 的 V1.4 测试定义，不修改测试以迎合实现结果；
+1. 先完成 T043、T043A、T043B、T044、T045、T045B、T045C 的 V1.4 测试与 Fixture 隔离契约，不修改测试以迎合实现结果；
 2. 完成 T046、T046A、T047、T048、T063C、T063E，落实先拆 Item component、后分别重建 Paper、quality protocol、QWK readiness 和配对统计门；
 3. 完成 T049、T050、T050A、T051、T052、T052E 的参考/预算/支持度/STOP校准/Package/Dev selector 自动化；
-4. 运行 T045A 的 `item component split -> separate paper rebuild -> train_fit candidate checkpoint -> train_calibration STOP boundary/package -> Dev fixed-package gate/select -> freeze -> test-like` fixture smoke；
+4. 运行 T045A 的 `item component split -> separate paper rebuild -> train_fit candidate checkpoint -> train_calibration STOP boundary/package -> Dev fixed-reference admission -> Quality Champion -> candidate-to-champion protection -> resource select -> freeze -> test-like` fixture smoke；
 5. 完成 T052A 的 Pilot 候选配置、费用上限和 support catalog 草案，但不联网调用；
 6. 向用户提交基于重建后 train_fit strict Paper 的真实 Agent Pilot 审批；
 7. 获批后依次执行 T052B–T052D，再进入 T057–T062 Router 实现；正式 calibration 与 Dev 选择只能在 T062 候选 checkpoint 产生后由 T063B 编排。
@@ -281,8 +290,8 @@ T043/T043A/T043B/T044/T045/T045B（测试先行）
 2. 禁止直接拆旧 train Paper、component跨split、跨split借题、5题/strict mix违规为阻塞性测试；
 3. Gate Error 未完成赋值、Severe/Extreme 边界、零 STOP=NA、half-up 11档 labels 和 QWK readiness 为阻塞性测试；
 4. Paired Bootstrap 必须验证同一 Paper 索引、5000次、固定种子、单侧边界和 CI 跨0失败；
-5. calibration梯度/replay/跨checkpoint排名为0、Dev边界修改为0、Test训练读取为0，均为阻塞性职责审计；
-6. 隐藏 cache、support catalog、质量门和资源优先自动选择为阻塞性集成测试；
+5. calibration梯度/replay/跨checkpoint排名为0、Dev边界修改为0、Quality Champion资源字段参与次数与人工替换次数为0、Test训练读取为0，均为阻塞性职责审计；
+6. 隐藏 cache、support catalog、固定参考准入门、Quality Champion 保护门和保护通过后的资源自动选择为阻塞性集成测试；
 7. 所有拆分、Paper重建、自动校准、Bootstrap 和 checkpoint 选择必须可重复；
 8. 所有报告行可追溯到 predictions、logs、config、external/internal manifests、calibration package、protocol hash 和统计产物；
 9. 失败结果不得删除。
@@ -291,7 +300,8 @@ T043/T043A/T043B/T044/T045/T045B（测试先行）
 
 - 已完成任务保持 `[X]`，本次未把任何新增或改写任务虚假标记完成。
 - 原尚未实现的 Router 任务已按 V1.4 最终职责拆分：T062 只训练候选 checkpoint，T051/T052 负责 per-checkpoint calibration Package，T052E 负责 Dev-only selector。
-- 当前任务总数为99，其中54项已完成、45项待执行；V1.4 新增 T043B、T046A 与 T052E 均保持未完成。
+- 任务完成数必须由脚本实时统计，不再在本段维护易漂移的手工总数；T045C 已完成实现前契约审核，T045D 仅在实现后代码/测试/错误处理/规格一致性和任务真实性审核全部完成后才可勾选。
 - 真实 SDK、权重、API 和付费调用必须获得用户单独批准。
 - `docs/design/研究定义与实验约束同步方案.md` V1.4 是本轮同步依据；后续若改变内部拆分顺序、四阶段职责、质量指标、Bootstrap 或 Dev 顺序，必须先回到规格/计划阶段。
 - 更新 `tasks.md` 后停留在用户审阅门禁，不自动进入 `speckit-implement`。
+

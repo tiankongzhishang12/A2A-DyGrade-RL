@@ -1,0 +1,56 @@
+cache_schema_version: "1.1"
+
+arbitrator_contexts:
+  - [CheapAgent, MidAgent, StrongAgent, EvidenceAgent]
+
+agents:
+  cheap:
+    agent_id: CheapAgent
+    mode: fixture
+    model_id: fixture-cheap-v1
+    model_revision: fixture-r1
+    prompt_path: prompts/cheap_scorer.txt
+    prompt_version: v1
+    generation_parameters: {temperature: 0.0, max_tokens: 256}
+    cost: 0.001
+    latency: 0.5
+  mid:
+    agent_id: MidAgent
+    mode: fixture
+    model_id: fixture-mid-v1
+    model_revision: fixture-r1
+    prompt_path: prompts/mid_scorer.txt
+    prompt_version: v1
+    generation_parameters: {temperature: 0.0, max_tokens: 384}
+    cost: 0.005
+    latency: 1.5
+  strong:
+    agent_id: StrongAgent
+    mode: fixture
+    model_id: fixture-strong-v1
+    model_revision: fixture-r1
+    prompt_path: prompts/strong_scorer.txt
+    prompt_version: v1
+    generation_parameters: {temperature: 0.0, max_tokens: 512}
+    cost: 0.020
+    latency: 4.0
+  evidence:
+    agent_id: EvidenceAgent
+    mode: fixture
+    model_id: fixture-evidence-v1
+    model_revision: fixture-r1
+    prompt_path: prompts/evidence_agent.txt
+    prompt_version: v1
+    generation_parameters: {temperature: 0.0, max_tokens: 512}
+    cost: 0.010
+    latency: 2.5
+  arbitrator:
+    agent_id: ArbitratorAgent
+    mode: fixture
+    model_id: fixture-arbitrator-v1
+    model_revision: fixture-r1
+    prompt_path: prompts/arbitrator_agent.txt
+    prompt_version: v1
+    generation_parameters: {temperature: 0.0, max_tokens: 512}
+    cost: 0.030
+    latency: 5.0

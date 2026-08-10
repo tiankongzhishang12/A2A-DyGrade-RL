@@ -1,10 +1,18 @@
-router:
+﻿router:
   state_features:
     - item_status
     - difficulty_status
     - agent_capability_status
     - a2a_history
     - remaining_budget
+  budget_fields:
+    - max_cost
+    - max_elapsed_time
+    - max_agent_calls
+    - max_a2a_exchanges
+  legacy_budget_aliases:
+    max_latency: max_elapsed_time
+    max_a2a_messages: max_a2a_exchanges
   actions:
     - cheap
     - mid
@@ -13,6 +21,32 @@ router:
     - second_opinion
     - arbitration
     - stop_item
+
+stop_risk:
+  severe_target: gate_error_gt_0.25
+  train_split: train_fit
+  calibration_split: train_calibration
+  calibration_output: boundary_or_failure
+  calibration_no_gradient: true
+  calibration_no_replay: true
+  calibration_no_checkpoint_ranking: true
+  main_method_upgrade_thresholds: forbidden
+  dev_boundary_immutable: true
+
+dev_selection:
+  required_budget_ids:
+    - Tight
+    - Medium
+    - Loose
+  fixed_reference_admission_first: true
+  quality_champion_no_resource: true
+  candidate_to_champion_gate: true
+  resource_order_after_quality_protection:
+    - cost_per_paper
+    - elapsed_time_per_paper
+    - agent_calls_per_paper
+    - a2a_exchanges_per_paper
+  manual_champion_override: forbidden
 
 difficulty_predictor:
   model_kind: hist_gradient_boosting
@@ -28,4 +62,4 @@ difficulty_predictor:
     early_stopping: true
     random_state: 42
   fixture_model_kind: fixture
-  threshold_source_split: train
+  threshold_source_split: train_fit

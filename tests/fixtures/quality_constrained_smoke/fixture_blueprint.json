@@ -1,0 +1,43 @@
+{
+  "blueprint_version": "quality_constrained_fixture_v1",
+  "seed": 20260729,
+  "train_paper_count": 500,
+  "dev_paper_count": 100,
+  "test_like_paper_count": 100,
+  "items_per_paper": 5,
+  "component_size": 10,
+  "train_fit_ratio": 0.8,
+  "strict_quota": {
+    "asap_sas": 2,
+    "sas_bench": 2,
+    "dress": 1
+  },
+  "gold_agent_by_dataset": {
+    "asap_sas": "CheapAgent",
+    "sas_bench": "StrongAgent",
+    "dress": "StrongAgent"
+  },
+  "max_pairwise_agent_error": 0.2,
+  "candidate_packages": [
+    {
+      "package_id": "pkg_a_champion",
+      "checkpoint_id": "ckpt_a_champion",
+      "policy_kind": "dynamic_with_redundant_evidence"
+    },
+    {
+      "package_id": "pkg_b_efficient",
+      "checkpoint_id": "ckpt_b_efficient",
+      "policy_kind": "dynamic_efficient"
+    },
+    {
+      "package_id": "pkg_c_reference_clone",
+      "checkpoint_id": "ckpt_c_reference_clone",
+      "policy_kind": "reference_clone"
+    },
+    {
+      "package_id": "pkg_d_budget_failure",
+      "checkpoint_id": "ckpt_d_budget_failure",
+      "policy_kind": "dynamic_with_loose_over_budget"
+    }
+  ]
+}

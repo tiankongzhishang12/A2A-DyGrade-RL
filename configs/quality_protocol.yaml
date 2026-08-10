@@ -1,0 +1,110 @@
+﻿protocol_version: quality_protocol_v1.3
+frozen_before:
+  - real_agent_pilot
+  - router_training
+  - train_calibration
+  - dev_selection
+  - test_evaluation
+
+datasets:
+  - asap_sas
+  - sas_bench
+  - dress
+
+gate_error:
+  legal_prediction: abs(pred_score-gold_score)/(score_max-score_min)
+  invalid_or_incomplete_value: 1.0
+  invalid_statuses:
+    - deferred
+    - budget_exhausted
+    - missing_score
+    - illegal_score
+    - parse_failure
+    - missing_active_cache
+
+safety:
+  severe_threshold: 0.25
+  severe_operator: ">"
+  extreme_threshold: 0.50
+  extreme_operator: ">="
+  unsafe_stop_denominator: all_stops
+  zero_stop_policy: na_quality_infeasible
+
+nmae:
+  dataset_aggregation: mean_gate_error
+  macro_aggregation: unweighted_dataset_mean
+  micro_reported_as_supplement: true
+
+qwk:
+  normalization: (score-score_min)/(score_max-score_min)
+  mapping: floor(10*z+0.5)_clip_0_10
+  fixed_labels:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    - 9
+    - 10
+  min_valid_completed_per_dataset: 100
+  min_gold_nonempty_bins: 2
+  require_positive_expected_weighted_disagreement: true
+
+bootstrap:
+  unit: paper
+  paired: true
+  replicates: 5000
+  confidence_level: 0.95
+  sidedness: one_sided
+  noninferiority_margin: 0.0
+  seed: 20260729
+  quantile_method: conservative_nearest_rank
+  resample_artifact: seed_ordered_paper_ids_algorithm_and_digest
+
+quality_gates:
+  fixed_reference_admission:
+    - UCB95(max_dataset_delta_severe) <= 0
+    - UCB95(max_dataset_delta_unsafe_stop) <= 0
+    - UCB95(delta_macro_nmae) <= 0
+    - LCB95(delta_macro_qwk) >= 0
+  all_budget_ids_required:
+    - Tight
+    - Medium
+    - Loose
+  undefined_or_cross_zero: quality_noninferiority_inconclusive
+
+quality_champion:
+  eligible_role: router_candidate
+  quality_champion_no_resource: true
+  order:
+    - worst_budget_dataset_severe
+    - worst_budget_dataset_unsafe_stop
+    - mean_budget_macro_nmae
+    - mean_budget_macro_qwk_desc
+    - package_id
+  manual_override: forbidden
+
+quality_protection:
+  candidate_to_champion_gate: true
+  all_budget_ids_required: true
+  noninferiority_margin: 0.0
+  resource_savings_cannot_override_quality: true
+
+resource_selection:
+  only_quality_protection_feasible: true
+  equal_weight_across_budgets: true
+  order:
+    - mean_budget_cost_per_paper
+    - mean_budget_elapsed_time_per_paper
+    - mean_budget_agent_calls_per_paper
+    - mean_budget_a2a_exchanges_per_paper
+    - package_id
+
+freeze:
+  dev_boundary_immutable: true
+  one_policy_package: true
+  test_one_shot: true

@@ -177,3 +177,31 @@ def _dump_simple_yaml(data: Any, indent: int = 0) -> str:
             else:
                 lines.append(f"{prefix}- {item}")
     return "\n".join(lines) + "\n"
+
+
+def read_csv(path: str | Path) -> list[dict[str, str]]:
+    with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def write_json(path: str | Path, data: Any, overwrite: bool = False) -> Path:
+    target = Path(path)
+    if target.exists() and not overwrite:
+        raise FileExistsError(f"输出已存在，若需覆盖请显式传入 overwrite: {target}")
+    ensure_dir(target.parent)
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    with tmp.open("w", encoding="utf-8", newline="\n") as handle:
+        json.dump(data, handle, ensure_ascii=False, sort_keys=True, indent=2)
+        handle.write("\n")
+    os.replace(tmp, target)
+    return target
+
+
+def file_sha256(path: str | Path, chunk_size: int = 1024 * 1024) -> str:
+    import hashlib
+
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        while chunk := handle.read(chunk_size):
+            digest.update(chunk)
+    return digest.hexdigest()

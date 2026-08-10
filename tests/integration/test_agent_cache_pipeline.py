@@ -262,7 +262,7 @@ def test_cache_manifest_supports_multiple_splits_and_safe_resume(tmp_path):
         )
 
 
-def test_resume_retries_failed_cache_and_rebuilds_failure_artifacts(tmp_path, monkeypatch):
+def test_resume_retries_failed_cache_and_preserves_failure_history(tmp_path, monkeypatch):
     items_path = tmp_path / "items_train.jsonl"
     config_path = tmp_path / "agents.yaml"
     output_root = tmp_path / "outputs" / "runs"
@@ -312,7 +312,11 @@ def test_resume_retries_failed_cache_and_rebuilds_failure_artifacts(tmp_path, mo
     assert resumed["failures"] == 0
     assert len(resumed["records"]) == 12
     assert all(record["status"] == "success" for record in resumed["records"])
-    assert not failures_path.exists()
+    assert failures_path.exists()
+    historical_failures = read_jsonl(failures_path)
+    assert len(historical_failures) == 7
+    assert all(record["status"] == "failed" and record["error"] for record in historical_failures)
+    assert resumed["failure_history_count"] == 7
 
     audit = (run_dir / "reports" / "agent_cache_audit.train.md").read_text(encoding="utf-8")
     assert "- failures: 0" in audit
@@ -332,6 +336,8 @@ def test_resume_retries_failed_cache_and_rebuilds_failure_artifacts(tmp_path, mo
     assert final_resume["generated"] == 0
     assert final_resume["reused"] == 12
     assert final_resume["failures"] == 0
+    assert final_resume["failure_history_count"] == 7
+    assert read_jsonl(failures_path) == historical_failures
 
 
 @pytest.mark.parametrize(
@@ -365,12 +371,25 @@ def test_resume_rebuilds_invalid_success_cache_record(tmp_path, field, value):
     assert resumed["generated"] == 1
     assert resumed["reused"] == 11
     assert resumed["failures"] == 0
+    assert resumed["invalid_cache_reuse_rejections"] == 1
+    assert resumed["invalid_cache_reuse_history_count"] == 1
+    rejection_path = output_root / common["run_id"] / "logs" / "cache_reuse_rejections.train.jsonl"
+    rejection_rows = read_jsonl(rejection_path)
+    assert len(rejection_rows) == 1
+    assert rejection_rows[0]["item_id"] == "train_0"
+    assert rejection_rows[0]["agent_id"] == "CheapAgent"
+    assert rejection_rows[0]["reason"]
     repaired = [record for record in resumed["records"] if record["agent_id"] == "CheapAgent"]
     assert len(repaired) == 1
     assert repaired[0]["status"] == "success"
     assert repaired[0]["run_id"] == common["run_id"]
     assert repaired[0]["pred_score"] is not None
     assert repaired[0]["justification"]
+
+    clean_resume = run_agent_cache(**common, resume=True)
+    assert clean_resume["invalid_cache_reuse_rejections"] == 0
+    assert clean_resume["invalid_cache_reuse_history_count"] == 1
+    assert read_jsonl(rejection_path) == rejection_rows
 
 
 def test_test_cache_requires_final_evaluation(tmp_path):
@@ -391,3 +410,39 @@ def test_test_cache_requires_final_evaluation(tmp_path):
             execution_mode="fixture_smoke",
             output_root=tmp_path / "outputs" / "runs",
         )
+
+
+def test_arbitrator_context_hash_binds_exact_exposed_opinions(tmp_path):
+    items_path = tmp_path / "items.jsonl"
+    config_path = tmp_path / "agents.yaml"
+    write_jsonl(items_path, make_items())
+    write_yaml(config_path, agent_config())
+    result = run_agent_cache(
+        config_path=config_path,
+        items_path=items_path,
+        split="train",
+        run_id="fixture_smoke_context_hash",
+        execution_mode="fixture_smoke",
+        seed=17,
+        sample_size=1,
+        output_root=tmp_path / "outputs" / "runs",
+    )
+    base = {
+        row["agent_id"]: row
+        for row in result["records"]
+        if row["agent_id"] != "ArbitratorAgent"
+    }
+    arbitrators = [row for row in result["records"] if row["agent_id"] == "ArbitratorAgent"]
+    assert arbitrators
+    for row in arbitrators:
+        opinions = [
+            {
+                "agent_id": base[agent_id]["agent_id"],
+                "pred_score": base[agent_id]["pred_score"],
+                "confidence": base[agent_id]["confidence"],
+                "justification": base[agent_id]["justification"],
+                "evidence": base[agent_id].get("evidence", {}),
+            }
+            for agent_id in row["metadata"]["context_agents"]
+        ]
+        assert row["context_hash"] == cache_module.stable_hash({"opinions": opinions})

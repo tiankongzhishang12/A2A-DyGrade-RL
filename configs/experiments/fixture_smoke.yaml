@@ -1,0 +1,94 @@
+run:
+  execution_mode: fixture_smoke
+  seed: 20260729
+  formal_eligible: false
+  online_agent_calls: false
+  persist_acceptance_run: true
+
+paths:
+  blueprint: tests/fixtures/quality_constrained_smoke/fixture_blueprint.json
+  agent_config: configs/experiments/fixture_smoke_agents.yaml
+  quality_protocol: configs/quality_protocol.yaml
+
+isolation:
+  static_fixture_root: tests/fixtures/quality_constrained_smoke
+  integration_test: tests/integration/test_quality_constrained_smoke.py
+  run_id_prefix: fixture_smoke_
+  forbid_formal_data_reads: true
+  forbid_data_processed_writes: true
+  forbid_cross_mode_cache_reuse: true
+  formal_loader_fail_closed: true
+
+internal_split:
+  train_fit_ratio: 0.8
+  seed: 20260729
+  rule_version: fixture_internal_item_component_v1
+  assignment_unit: item_component
+
+paper:
+  strict_quotas:
+    - asap_sas: 2
+      sas_bench: 2
+      dress: 1
+  budget_placeholder:
+    max_cost: 1.0
+    max_elapsed_time: 120.0
+    max_agent_calls: 20
+    max_a2a_exchanges: 4
+
+budget_calibration:
+  split: train_calibration
+  quantiles:
+    Tight: 0.25
+    Medium: 0.50
+    Loose: 0.75
+  quantile_method: nearest_rank
+  fixed_behavior_policy_ids:
+    - Fixture-Behavior-Tight
+    - Fixture-Behavior-Medium
+    - Fixture-Behavior-Loose
+  fixture_behavior_envelopes:
+    Fixture-Behavior-Tight:
+      cost: 0.080
+      elapsed_time: 16.0
+      agent_calls: 6
+      a2a_exchanges: 1
+    Fixture-Behavior-Medium:
+      cost: 0.095
+      elapsed_time: 20.0
+      agent_calls: 8
+      a2a_exchanges: 2
+    Fixture-Behavior-Loose:
+      cost: 0.120
+      elapsed_time: 30.0
+      agent_calls: 10
+      a2a_exchanges: 4
+
+capability_support:
+  fit_split: train_fit
+  calibration_split: train_calibration
+  support_quantile: 0.25
+  quantile_method: nearest_rank
+
+stop_calibration:
+  split: train_calibration
+  risk_limit: 0.05
+  confidence_level: 0.95
+  min_stops_per_dataset: 100
+  candidate_order: max_coverage_then_lower_worst_ucb_then_lower_boundary
+  calibration_no_gradient: true
+  calibration_no_replay: true
+  calibration_no_checkpoint_ranking: true
+
+dev_selection:
+  budget_ids: [Tight, Medium, Loose]
+  fixed_reference_admission_first: true
+  quality_champion_no_resource: true
+  candidate_to_champion_gate: true
+  dev_boundary_immutable: true
+  deterministic_repeat_check: true
+
+test_like:
+  one_shot: true
+  training_reads: 0
+  calibration_updates: 0
