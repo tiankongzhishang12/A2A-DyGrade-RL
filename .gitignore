@@ -8,8 +8,20 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .cache/
+.tox/
+.nox/
+.hypothesis/
+.pyre/
+.pytype/
+.pyright/
+.ipynb_checkpoints/
 .coverage
+.coverage.*
+coverage.xml
+coverage.json
 htmlcov/
+junit*.xml
+test-results/
 
 # =========================
 # Python packaging / build artifacts
@@ -20,6 +32,8 @@ dist/
 .eggs/
 *.egg
 pip-wheel-metadata/
+__pypackages__/
+*.whl
 
 # =========================
 # Virtual environments
@@ -34,6 +48,9 @@ ENV/
 # =========================
 .env
 .env.*
+!.env.example
+!.env.sample
+!.env.template
 *.key
 *.pem
 *.p12
@@ -68,6 +85,14 @@ outputs/runs/*
 *.onnx
 *.pkl
 *.joblib
+
+# =========================
+# Experiment tracker local state
+# =========================
+wandb/
+mlruns/
+lightning_logs/
+tensorboard/
 
 # =========================
 # Logs / temporary files
