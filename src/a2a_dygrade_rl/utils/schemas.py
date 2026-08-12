@@ -26,6 +26,10 @@ class Item(_Serializable):
     gold_score: float
     score_min: float
     score_max: float
+    schema_version: str = "item_v1"
+    scoring_unit: str = "response"
+    scoring_mode: str = "holistic"
+    source_assets: list[dict[str, Any]] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -13,7 +13,7 @@ from a2a_dygrade_rl.utils.logging import configure_run_logger
 
 def main() -> None:
     parser = add_common_args(argparse.ArgumentParser(description="审计 prepared data 产物"))
-    parser.add_argument("--processed-dir", required=True, help="data/processed 目录")
+    parser.add_argument("--processed-dir", default="data/processed/semantic_v2", help="Semantic V2 prepared data 目录")
     parser.add_argument("--output-root", default="outputs/runs", help="run 输出根目录")
     parser.add_argument("--min-paper-items", type=int, default=5)
     parser.add_argument("--max-paper-items", type=int, default=8)

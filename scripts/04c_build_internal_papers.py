@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import sys
@@ -15,10 +15,10 @@ from a2a_dygrade_rl.utils.logging import configure_run_logger
 
 def main() -> None:
     parser = add_common_args(argparse.ArgumentParser(description="分别重建并审计 train_fit/train_calibration strict Paper"))
-    parser.add_argument("--items", default="data/processed/items_train.jsonl", help="外部 train Item JSONL")
-    parser.add_argument("--internal-item-manifest", default="data/processed/internal_item_split_manifest.csv")
-    parser.add_argument("--external-paper-manifest", default="data/processed/paper_manifest.csv")
-    parser.add_argument("--output-dir", default="data/processed", help="数据型产物目录")
+    parser.add_argument("--items", default="data/processed/semantic_v2/items_train.jsonl", help="外部 train Item JSONL")
+    parser.add_argument("--internal-item-manifest", default="data/processed/semantic_v2/internal_item_split_manifest.csv")
+    parser.add_argument("--external-paper-manifest", default="data/processed/semantic_v2/paper_manifest.csv")
+    parser.add_argument("--output-dir", default="data/processed/semantic_v2", help="数据型产物目录")
     parser.add_argument("--output-root", default="outputs/runs", help="run 产物根目录")
     args = parser.parse_args()
     if args.sample_size is not None:
