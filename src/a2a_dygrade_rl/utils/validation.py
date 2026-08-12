@@ -1,4 +1,4 @@
-﻿"""schema、职责边界与数据完整性校验。"""
+"""schema、职责边界与数据完整性校验。"""
 
 from __future__ import annotations
 
@@ -22,6 +22,38 @@ ITEM_REQUIRED = {
     "score_min",
     "score_max",
     "metadata",
+}
+
+ITEM_SEMANTIC_V2_REQUIRED = {
+    "schema_version",
+    "scoring_unit",
+    "scoring_mode",
+    "source_assets",
+}
+
+SOURCE_ASSET_REQUIRED = {
+    "asset_id",
+    "relative_path",
+    "sha256",
+    "mime_type",
+    "source_uri",
+}
+
+MODEL_SPECIFIC_PREPARED_KEYS = {
+    "input_ids",
+    "attention_mask",
+    "pixel_values",
+    "image_embeds",
+    "image_embeddings",
+    "vision_embeddings",
+    "visual_tokens",
+    "vision_tokens",
+    "token_ids",
+    "tokenizer_name",
+    "tokenizer_revision",
+    "processor_name",
+    "processor_revision",
+    "model_inputs",
 }
 
 PAPER_REQUIRED = {"paper_id", "items", "paper_budget"}
@@ -182,6 +214,40 @@ def _require_bool(record: dict[str, Any], field: str, label: str) -> bool:
     return value
 
 
+def _find_model_specific_prepared_keys(value: Any, *, path: str = "$") -> list[str]:
+    findings: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if str(key).lower() in MODEL_SPECIFIC_PREPARED_KEYS:
+                findings.append(child_path)
+            findings.extend(_find_model_specific_prepared_keys(child, path=child_path))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            findings.extend(_find_model_specific_prepared_keys(child, path=f"{path}[{index}]"))
+    return findings
+
+
+def _validate_source_asset(asset: Any, *, item_id: str, index: int) -> None:
+    if not isinstance(asset, dict):
+        raise ValueError(f"Item source_assets[{index}] 必须是对象: {item_id}")
+    require_fields(asset, SOURCE_ASSET_REQUIRED, f"Item source_assets[{index}]")
+    _require_nonempty_text(
+        asset,
+        ("asset_id", "relative_path", "sha256", "mime_type", "source_uri"),
+        f"Item source_assets[{index}]",
+    )
+    relative_path = str(asset["relative_path"]).replace("\\", "/")
+    if relative_path.startswith("/") or re.match(r"^[A-Za-z]:/", relative_path):
+        raise ValueError(f"Item source asset 必须使用 prepared root 相对路径: {item_id}")
+    if any(part == ".." for part in relative_path.split("/")):
+        raise ValueError(f"Item source asset relative_path 不得越界: {item_id}")
+    if re.fullmatch(r"[0-9a-f]{64}", str(asset["sha256"])) is None:
+        raise ValueError(f"Item source asset sha256 非法: {item_id}")
+    if not str(asset["mime_type"]).startswith("image/"):
+        raise ValueError(f"Item source asset MIME 必须是 image/*: {item_id}")
+
+
 def validate_item(record: dict[str, Any]) -> None:
     require_fields(record, ITEM_REQUIRED, "Item")
     if not str(record["item_id"]).strip():
@@ -192,6 +258,8 @@ def validate_item(record: dict[str, Any]) -> None:
         raise ValueError(f"Item student_answer 不能为空: {record['item_id']}")
     if not str(record.get("rubric", "")).strip() and not str(record.get("reference_answer", "")).strip():
         raise ValueError(f"Item 至少需要 rubric 或 reference_answer: {record['item_id']}")
+    if not isinstance(record.get("metadata"), dict):
+        raise ValueError(f"Item metadata 必须是对象: {record['item_id']}")
     score_min = _require_finite(record["score_min"], "score_min")
     score_max = _require_finite(record["score_max"], "score_max")
     gold_score = _require_finite(record["gold_score"], "gold_score")
@@ -200,6 +268,22 @@ def validate_item(record: dict[str, Any]) -> None:
     if not score_min <= gold_score <= score_max:
         raise ValueError(f"gold_score 越界: {record['item_id']}")
 
+    if str(record.get("schema_version", "")) == "item_semantic_v2":
+        require_fields(record, ITEM_SEMANTIC_V2_REQUIRED, "Item Semantic V2")
+        _require_nonempty_text(record, ("schema_version", "scoring_unit", "scoring_mode"), "Item Semantic V2")
+        assets = record.get("source_assets")
+        if not isinstance(assets, list):
+            raise ValueError(f"Item source_assets 必须是列表: {record['item_id']}")
+        for index, asset in enumerate(assets):
+            _validate_source_asset(asset, item_id=str(record["item_id"]), index=index)
+        formal_eligible = record["metadata"].get("formal_eligible")
+        if not isinstance(formal_eligible, bool):
+            raise ValueError(f"Item Semantic V2 metadata.formal_eligible 必须是显式布尔值: {record['item_id']}")
+        model_specific = _find_model_specific_prepared_keys(record)
+        if model_specific:
+            raise ValueError(
+                f"Item Semantic V2 不得包含模型专用 Token/视觉表示: {record['item_id']} {model_specific[:10]}"
+            )
 
 def canonical_budget(budget: dict[str, Any]) -> dict[str, float | int]:
     """把 legacy 预算键转换为正式四维键。"""
@@ -249,23 +333,60 @@ def validate_paper(
             raise ValueError(f"Paper 引用不存在 item: {record['paper_id']} {missing}")
 
 
+def _normalized_leakage_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().lower().split())
+
+
 def validate_no_split_leakage(items: list[dict[str, Any]]) -> None:
     item_splits: dict[str, set[str]] = defaultdict(set)
-    prompt_splits: dict[str, set[str]] = defaultdict(set)
+    prompt_group_splits: dict[tuple[str, str], set[str]] = defaultdict(set)
+    prompt_text_splits: dict[str, set[str]] = defaultdict(set)
+    exact_prompt_answer_splits: dict[tuple[str, str], set[str]] = defaultdict(set)
+    lineage_splits: dict[tuple[str, str, str], set[str]] = defaultdict(set)
+    component_splits: dict[str, set[str]] = defaultdict(set)
     for item in items:
-        split = item.get("metadata", {}).get("split")
-        prompt_group = item.get("metadata", {}).get("prompt_group") or item.get("metadata", {}).get("prompt_id")
+        metadata = item.get("metadata", {})
+        split = metadata.get("split")
         if not split:
             raise ValueError(f"Item 缺少 split metadata: {item.get('item_id')}")
-        item_splits[str(item["item_id"])].add(str(split))
-        prompt_splits[str(prompt_group or item["prompt"])].add(str(split))
-    leaked_items = {key: value for key, value in item_splits.items() if len(value) > 1}
-    leaked_prompts = {key: value for key, value in prompt_splits.items() if "test" in value and len(value) > 1}
-    if leaked_items:
-        raise ValueError(f"发现 item 跨 split 泄漏: {leaked_items}")
-    if leaked_prompts:
-        raise ValueError(f"发现 test prompt 跨 split 泄漏: {leaked_prompts}")
+        split = str(split)
+        item_id = str(item["item_id"])
+        dataset = _normalized_leakage_text(item.get("dataset"))
+        prompt = _normalized_leakage_text(item.get("prompt"))
+        answer = _normalized_leakage_text(item.get("student_answer"))
+        prompt_group = _normalized_leakage_text(metadata.get("prompt_group") or item.get("prompt"))
+        source_file = _normalized_leakage_text(metadata.get("source_file"))
+        source_record_id = _normalized_leakage_text(metadata.get("source_record_id"))
+        component_id = _normalized_leakage_text(metadata.get("leakage_component_id"))
 
+        item_splits[item_id].add(split)
+        prompt_group_splits[(dataset, prompt_group)].add(split)
+        if prompt:
+            prompt_text_splits[prompt].add(split)
+        if prompt and answer:
+            exact_prompt_answer_splits[(prompt, answer)].add(split)
+        if dataset and source_file and source_record_id:
+            lineage_splits[(dataset, source_file, source_record_id)].add(split)
+        if component_id:
+            component_splits[component_id].add(split)
+
+    leaked_items = {key: value for key, value in item_splits.items() if len(value) > 1}
+    leaked_prompt_groups = {key: value for key, value in prompt_group_splits.items() if len(value) > 1}
+    leaked_prompt_text = {key: value for key, value in prompt_text_splits.items() if len(value) > 1}
+    leaked_exact = {key: value for key, value in exact_prompt_answer_splits.items() if len(value) > 1}
+    leaked_lineage = {key: value for key, value in lineage_splits.items() if len(value) > 1}
+    leaked_components = {key: value for key, value in component_splits.items() if len(value) > 1}
+    if leaked_items:
+        raise ValueError(f"发现 item 跨 split 泄漏: {dict(list(leaked_items.items())[:10])}")
+    if leaked_prompt_groups or leaked_prompt_text:
+        examples = list(leaked_prompt_groups.items())[:5] + list(leaked_prompt_text.items())[:5]
+        raise ValueError(f"发现 test prompt group 或其他 prompt group 跨 split 泄漏: {examples}")
+    if leaked_exact:
+        raise ValueError(f"发现跨数据集 exact prompt-answer 泄漏: {dict(list(leaked_exact.items())[:10])}")
+    if leaked_lineage:
+        raise ValueError(f"发现 source lineage 跨 split 泄漏: {dict(list(leaked_lineage.items())[:10])}")
+    if leaked_components:
+        raise ValueError(f"发现 leakage component 跨 split 泄漏: {dict(list(leaked_components.items())[:10])}")
 
 def validate_agent_output(
     record: dict[str, Any],

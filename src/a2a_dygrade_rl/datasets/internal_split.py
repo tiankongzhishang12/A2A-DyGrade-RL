@@ -1,4 +1,4 @@
-﻿"""V1.4 外部 train 主路由 Item 的内部 component 原子拆分。"""
+"""V1.4 外部 train 主路由 Item 的内部 component 原子拆分。"""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ class InternalSplitResult:
 
 
 def build_internal_components(items: Iterable[dict[str, Any]]) -> tuple[InternalComponent, ...]:
-    """按 dataset+prompt group、exact prompt-answer 与既有 leakage id 建传递分量。"""
+    """按 dataset+prompt group、全局 prompt/exact answer、source lineage 与既有 leakage id 建传递分量。"""
 
     ordered = sorted((dict(item) for item in items), key=lambda row: str(row.get("item_id", "")))
     if not ordered:
@@ -104,8 +104,10 @@ def build_internal_components(items: Iterable[dict[str, Any]]) -> tuple[Internal
 
     dsu = _DisjointSet(len(ordered))
     prompt_seen: dict[tuple[str, str], int] = {}
-    exact_seen: dict[tuple[str, str, str], int] = {}
-    leakage_seen: dict[tuple[str, str], int] = {}
+    prompt_text_seen: dict[str, int] = {}
+    exact_seen: dict[tuple[str, str], int] = {}
+    lineage_seen: dict[tuple[str, str, str], int] = {}
+    leakage_seen: dict[str, int] = {}
 
     def connect(mapping: dict[Any, int], key: Any, index: int) -> None:
         if not key or (isinstance(key, tuple) and any(not value for value in key)):
@@ -120,16 +122,20 @@ def build_internal_components(items: Iterable[dict[str, Any]]) -> tuple[Internal
         metadata = item.get("metadata", {})
         dataset = _normalized_text(item.get("dataset"))
         prompt_group = _normalized_text(metadata.get("prompt_group") or item.get("prompt"))
-        exact_key = (
+        prompt_text = _normalized_text(item.get("prompt"))
+        exact_key = (prompt_text, _normalized_text(item.get("student_answer")))
+        source_lineage = (
             dataset,
-            _normalized_text(item.get("prompt")),
-            _normalized_text(item.get("student_answer")),
+            _normalized_text(metadata.get("source_file")),
+            _normalized_text(metadata.get("source_record_id")),
         )
         leakage_id = _normalized_text(metadata.get("leakage_component_id"))
         connect(prompt_seen, (dataset, prompt_group), index)
+        connect(prompt_text_seen, prompt_text, index)
         connect(exact_seen, exact_key, index)
+        connect(lineage_seen, source_lineage, index)
         if leakage_id:
-            connect(leakage_seen, (dataset, leakage_id), index)
+            connect(leakage_seen, leakage_id, index)
 
     groups: dict[int, list[dict[str, Any]]] = defaultdict(list)
     for index, item in enumerate(ordered):
@@ -139,7 +145,7 @@ def build_internal_components(items: Iterable[dict[str, Any]]) -> tuple[Internal
     for group_items in groups.values():
         datasets = {str(item["dataset"]) for item in group_items}
         if len(datasets) != 1:
-            raise ValueError(f"内部 leakage component 跨 dataset: {sorted(datasets)}")
+            raise ValueError(f"内部全局 leakage component 跨 dataset，禁止静默拆分: {sorted(datasets)}")
         ids = tuple(sorted(str(item["item_id"]) for item in group_items))
         prompt_groups = tuple(
             sorted(

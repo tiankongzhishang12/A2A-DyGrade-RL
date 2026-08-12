@@ -2,15 +2,19 @@
 
 **功能分支**：`001-a2a-dygrade-rl`
 **创建日期**：2026-07-04
-**最后修订**：2026-07-29
-**状态**：V1.4 内部拆分、质量协议与完整 Fixture Smoke 已实现并通过；等待真实 Agent Pilot 审批
-**输入**：用户确认 V1.3 质量协议继续有效，并进一步要求：`train_fit` 只训练参数，`train_calibration` 只为每个冻结 checkpoint 校准 STOP 安全边界并组装 Package，Dev 才选择最终 Router；内部数据不得直接拆现有 train Paper，必须先按题目组拆分原 train 主路由 Item，再分别重建 `train_fit/train_calibration` strict Paper；Dev 必须先通过固定参考准入门，再以 Quality Champion 保护质量，最后才比较资源；删除 Fixed Cascade、Per-item Myopic Router 和 Greedy Marginal Utility 三个 Baseline。
+**最后修订**：2026-08-11
+**状态**：V1.5 Dataset Semantic V2 数据整改已于2026-08-11完成；Semantic Readiness 与 internal audit 均为 PASS，尚未下载模型、安装新依赖或调用真实推理服务
+**输入**：用户确认主研究对象是固定 Agent 环境中的动态路由增益，而不是先把基础阅卷器做到生产级准确率；DREsS 主实验采用无 Anchor 的 Content、Organization、Language 三维评分；ASAP-SAS 必须恢复官方 Prompt/Rubric 并使用 Score1 作为最终 Gold；SAS-Bench 必须从 Step Item 改为完整学生回答 Item；旧 100 Item Pilot 只保留为 cliproxy、模型身份、结构化输出、Token 与成本链路的工程证据，不得作为正式论文评分结果或 Formal cache。
 
 ---
 
 ## 1. 研究目标与范围
 
 本文不训练、不微调任何评分 Agent，也不研究系统能够批改什么题。研究对象是在固定评分 Agent 池中，对一份包含多道真实学生作答的**模拟试卷评分 episode**进行质量约束的动态资源调度。
+
+基础 Agent 的绝对准确率不需要先达到生产部署水平；主论文结论限定为：在语义有效、无 Anchor、所有方法共享相同 prepared data、Agent cache、预算和评价脚本的固定环境中，A2A-DyGrade-RL 是否改善评分质量与资源消耗的 Pareto Frontier。低绝对指标可以如实报告，但语义缺失、占位 Rubric、错误评分单位、常数输出或接近随机的退化环境不得用于支持算法结论。
+
+在任何新的正式 Agent cache、Router 训练或最终评价前，三个数据集必须先完成 Dataset Semantic V2 整改并通过 fail-closed Semantic Readiness Gate；旧 prepared data 和旧 Pilot cache 不能被直接晋升为正式实验资产。
 
 Router 每一步联合决定：
 
@@ -73,7 +77,7 @@ max_a2a_exchanges
 
 ### 2.8 内部 Item Split
 
-`Internal Item Split` 是在外部 train 内部进行的第二层拆分。它从当前27,375条 train 主路由候选 Item 出发，以 `dataset + prompt_group` 及 exact-answer/leakage component 的传递连通分量为不可拆分单元，目标约80%/20%分配到 `train_fit/train_calibration`。它不直接切分已有 `paper_train_*`。
+`Internal Item Split` 是在 Dataset Semantic V2 外部 train 内部进行的第二层拆分。它从通过 Semantic Readiness 的外部 train 主路由候选 Item 出发，以 dataset prompt group、source lineage 及 exact-answer/leakage component 的传递连通分量为不可拆分单元，目标约80%/20%分配到 `train_fit/train_calibration`。它不直接切分已有 `paper_train_*`，也不沿用旧 Item 数量。
 
 ### 2.9 内部重建 Paper
 
@@ -95,6 +99,26 @@ max_a2a_exchanges
 
 `Fixture Smoke` 是使用专用确定性测试资产、`FixtureClient` 和 fixture-only 候选 checkpoint 对正式核心流水线进行的小规模端到端验收。它必须复用 `src/a2a_dygrade_rl/` 中与正式实验相同的 split、Paper rebuild、cache、自动校准、质量门、Package 和 Dev selector 实现；只允许数据、配置和外部 Agent 边界使用 fixture。Fixture 输入位于 `tests/fixtures/quality_constrained_smoke/`，测试位于 `tests/integration/test_quality_constrained_smoke.py`，配置位于 `configs/experiments/fixture_smoke.yaml`，持久化验收产物只写入 `outputs/runs/fixture_smoke_<run_id>/`。所有 Fixture 产物必须标记或由完整 artifact inventory 绑定 `formal_eligible=false`，不得进入正式训练、能力画像、预算、参考、checkpoint 选择或论文结果汇总；正式入口拒绝必须由实际调用探针验证，候选进入 Dev/Test-like 时必须真正执行冻结 STOP 边界，预算不可行候选不得仅凭质量门通过而晋级。
 
+### 2.14 Dataset Semantic V2
+
+`Dataset Semantic V2` 是对 ASAP-SAS、DREsS 和 SAS-Bench 的正式语义整改版本。它不是对旧 JSONL 的局部覆盖，而是根据原始资料重新确定题目内容、评分单位、Gold 定义、分数范围、Prompt group、来源溯源和异常隔离规则，并重新生成 Item、split manifest、Paper、内部拆分和所有后续 cache。
+
+### 2.15 Semantic Readiness Gate
+
+`Semantic Readiness Gate` 是任何真实 Agent 调用前的 fail-closed 数据门禁。它同时执行全局完整性、数据集专用语义、评分范围、来源哈希、quarantine、split 泄漏、Paper 引用和模型可见输入 Gold 隔离检查。只有状态为 `PASS` 且 `formal_cache_eligible=true` 的 Dataset Semantic V2 资产可以进入真实 Agent Pilot 或 Formal cache。
+
+### 2.16 无 Anchor 主实验协议
+
+`anchor_mode=none` 表示主实验不向 Agent 提供从 `train_fit` 选择的低、中、高分作文示例，也不把完整已评分学生回答作为 Few-shot demonstration。数据集官方题目、参考答案、评分档描述和 Rubric 原文仍可作为任务定义使用；ASAP-SAS 的完整 Anchor Paper PDF、DREsS 的训练作文 Anchor 和 SAS-Bench 的 Gold Step 标签均不得进入模型可见输入。Anchor 如后续研究，只能作为独立配置、独立 Prompt hash、独立 cache 和独立报告的鲁棒性实验。
+
+### 2.17 Scoring Unit
+
+`Scoring Unit` 表示一个 Item 所对应的评分对象。ASAP-SAS 的单位是一条短答案，DREsS 的单位是一篇完整作文，SAS-Bench 的单位是一条完整学生回答而不是单个 Step。评分单位一旦改变，旧 Item ID、split、Paper 和 Agent cache 全部失效。
+
+### 2.18 Quarantine Record
+
+`Quarantine Record` 记录因缺失学生作答、结构损坏、分数越界、Gold 内部不一致、无法关联来源或缺少必要评分信息而不能进入正式数据的原始记录及原因。异常记录不得被静默跳过，也不得为追求 Item 数量而自动修补为猜测内容。
+
 ## 3. 用户场景与测试
 
 ### 用户故事 1：构建可审计的外部与内部模拟试卷数据（优先级：P1）
@@ -103,18 +127,23 @@ max_a2a_exchanges
 
 **优先级原因**：如果直接拆现有 train Paper，同一 prompt group 会跨两个内部 split；如果 prepared data、内部 Item 分配和重建 Paper 不可审计，后续 Agent cache、校准、轨迹和论文结果均不可信。
 
-**独立测试**：运行外部 prepared data audit 与内部 split/rebuild audit，验证 schema、分值范围、Item/Prompt/Paper 泄漏、strict paper mix、leftover 和角色消费边界。
+**独立测试**：运行 Dataset Semantic V2 资源审计、prepared data audit、实际 Agent request Gold 隔离检查与内部 split/rebuild audit，验证三个数据集的评分单位、Gold 定义、语义字段、quarantine、分值范围、Item/Prompt/Paper 泄漏、strict paper mix、leftover 和角色消费边界。
 
 **验收场景**：
 
 1. **给定** 三个原始数据集，**当** 运行数据准备流程，**则** 每条 Item 包含题目、作答、Rubric 或参考答案、gold score、分值范围、题型、来源和可审计 metadata。
 2. **给定** 外部 split Item，**当** 构造模拟试卷，**则**主实验每份 Paper 固定5道题，并满足已配置的 strict dataset mix。
 3. **给定** 外部 train/dev/test，**当** 运行审计，**则** Item、Prompt、Paper 和 exact prompt-answer 跨 split 泄漏均为0。
-4. **给定** 当前27,375条外部 train 主路由 Item，**当** 构建内部 split，**则**程序以 prompt/leakage connected component 为不可拆分单元分配 `train_fit/train_calibration`，而不是分配现有 `paper_train_*`。
+4. **给定** 已通过 Semantic Readiness Gate 的 Dataset Semantic V2 外部 train Item 池，**当** 构建内部 split，**则**程序以 prompt/leakage connected component 为不可拆分单元分配 `train_fit/train_calibration`，而不是分配现有 `paper_train_*`。
 5. **给定** 内部 Item 分配，**当** 构造内部 Paper，**则**分别产生新的 `paper_train_fit_*` 和 `paper_train_calibration_*`，每份固定5题并满足 strict mix。
 6. **给定** 目标80%/20%与大型 prompt group，**当** 精确比例和 group 完整性冲突，**则**保持 group 完整并记录实际比例、偏差和确定性选择依据，不拆 group。
 7. **给定** 无法组成 strict Paper 的 Item，**当** 构建结束，**则**将其记录为 leftover 和原因，不跨内部 split 借题、不静默丢失。
 8. **给定** internal manifests，**当** 运行审计，**则**内部 Item、prompt group、exact-answer component、Paper overlap、跨 split 引用和 strict mix 违规均为0。
+9. **给定** ASAP-SAS 原始 TSV 与官方描述 ZIP，**当** 构建 Item，**则**每个 EssaySet 使用真实题目与官方 Rubric，`gold_score` 等于 `Score1`，`Score2` 只作评分者一致性 metadata，任何 ZIP/附件占位文本数量为0。
+10. **给定** DREsS 主数据，**当** 构建 Item，**则**只使用非空完整作文，Gold 同时包含 Content、Organization、Language 三个维度，总分严格等于三维之和，主实验不提供 Anchor，DREsS_CASE 不进入主实验。
+11. **给定** SAS-Bench 顶层学生回答，**当** 构建 Item，**则**一个顶层回答只生成一个完整回答 Item，`gold_score=manual_label`、`score_max=total`，有序 Step 仅用于重建完整回答和隐藏审计，不再把单个 Step 当作主实验 Item。
+12. **给定** 任一语义字段缺失、评分范围不合法、Gold 内部不一致或来源无法确认的记录，**当** 构建结束，**则**生成带明确原因的 quarantine record，禁止静默跳过或进入正式 Paper。
+13. **给定** Dataset Semantic V2 尚未通过全部门禁，**当** 尝试运行真实 Agent cache，**则**流程必须拒绝；给定旧 prepared data 或旧 Pilot cache，正式入口同样必须拒绝复用。
 
 ### 用户故事 2：冻结并缓存多 Agent 评分证据（优先级：P2）
 
@@ -132,7 +161,7 @@ max_a2a_exchanges
 4. **给定** `train_fit` cache，**当** 构建能力画像，**则** 画像由程序自动拟合；`train_calibration` 只允许自动校准支持度边界，dev/test 均不得参与，也不产生具体 Item 的最优 Agent 标签。
 5. **给定** fixture、pilot 和 formal 三种模式，**当** 运行或续跑 cache，**则** 三种运行目录和 active records 物理隔离。
 6. **给定** 已冻结 context support catalog，**当** 某动作不在 catalog 中或缺少合法 active record，**则** Action Mask 屏蔽该动作并记录原因，评价阶段不在线补算。
-7. **给定** V1.4 internal manifests，**当** 生成 Formal cache，**则** train 侧 records 按新的 `train_fit/train_calibration` Item split 写入并校验；旧 `paper_train_*` 只作来源溯源，不决定 cache split。
+7. **给定** Dataset Semantic V2 internal manifests，**当** 生成 Formal cache，**则** train 侧 records 按新的 `train_fit/train_calibration` Item split 写入并校验；旧 `paper_train_*` 只作历史来源溯源，不决定 cache split。
 
 ---
 
@@ -167,9 +196,13 @@ max_a2a_exchanges
 
 ## 4. 边界情况
 
-- 源数据缺少 reference answer，但 Rubric 和作答足以评分时，Item 可以保留并记录 `has_reference_answer=false`。
+- 源数据缺少 reference answer，但 Rubric 和作答足以评分时，Item 可以保留并记录 `has_reference_answer=false`；DREsS 开放式作文允许 reference 为空，但必须有冻结的三维评分定义。
+- ASAP-SAS 官方描述中包含图片、地图、图表或实验数据时，不允许文本抽取后静默丢失；主实验可使用经过来源核验的结构化文本转录，并保留原始 asset hash，转录不得添加新标签或推断性答案。
+- ASAP-SAS 的 `Score1` 与 `Score2` 不一致时，仍以官方最终分数字段 `Score1` 为 Gold，不得取平均值。
+- DREsS 原始 `total` 缺失或与三个 Trait 之和不一致、但三个 Trait 和作文均合法时，以三个 Trait 之和构造 Gold total，并保留原始差异用于审计；作文为空时必须 quarantine。
+- SAS-Bench 的空 Step 若带非零人工 Step 分数、完整人工分超过题目满分、Step 和完整分数不一致或中英文来源无法对齐时，整条完整回答必须 quarantine。
 - 不同数据集使用不同分值范围时，保留原始分数，并按各 Item 分值范围计算 Gate Error 与11档 QWK 映射。
-- 现有5,475份 train Paper 因共享 prompt group 形成单一连通分量时，不允许退化为随机切 Paper；必须回到 Item/题目组层分配后重建。
+- 旧外部 train Paper 因共享 prompt group 形成大型连通分量时，不允许退化为随机切 Paper；必须回到 Dataset Semantic V2 Item/题目组层分配后重建。
 - 目标80%/20%与完整 prompt group 冲突时，保持 group 完整，记录实际比例和偏差，不拆 group。
 - 某个内部 split 无法覆盖三个数据集或无法构造 strict Paper 时，内部构建 readiness failure，不得跨 split 借 Item。
 - strict mix 无法继续构造完整 Paper 时，剩余 Item 记录为 leftover，不得静默进入不合法 Paper。
@@ -193,11 +226,11 @@ max_a2a_exchanges
 
 ### 5.1 数据与模拟试卷
 
-- **FR-001**：系统必须将 DREsS、ASAP-SAS 和 SAS-Bench 规范化为统一 Item schema。
-- **FR-002**：系统必须保留 `item_id`、dataset、question type、prompt、student answer、Rubric/reference、gold score、score min/max 和 metadata。
+- **FR-001**：系统必须将 DREsS、ASAP-SAS 和 SAS-Bench 按 Dataset Semantic V2 的数据集专用评分语义规范化为统一且可审计的 Item schema，不得用统一字段掩盖不同数据集的真实评分单位。
+- **FR-002**：系统必须保留 `item_id`、dataset、question type、prompt、student answer、Rubric/reference、gold score、score min/max、scoring unit、scoring mode、schema/version、来源指纹、formal eligibility 和 metadata；DREsS 还必须保留三个隐藏 Gold Trait。
 - **FR-003**：系统必须在各 split 内构造固定5题的模拟 Paper，并保存 `paper_id`、Item 引用、strict mix、构造版本和共享资源配置。
-- **FR-004**：系统必须生成 split manifest 和 paper manifest，并阻塞 Item、Prompt、Paper、exact prompt-answer 和引用关系泄漏。
-- **FR-005**：系统必须记录主路由范围 Item 与未进入 Paper Item 的边界，主 Router 训练和评价只消费 Paper 引用 Item。
+- **FR-004**：系统必须生成 split manifest 和 paper manifest，并阻塞 Item、Prompt、Paper、source lineage、跨数据集 exact prompt-answer 和引用关系泄漏。
+- **FR-005**：系统必须记录主路由范围 Item、quarantine Item 与未进入 Paper Item 的边界，主 Router 训练和评价只消费通过 Semantic Readiness 且被合法 Paper 引用的 Item。
 
 ### 5.2 Agent 冻结、Cache 与画像
 
@@ -211,7 +244,7 @@ max_a2a_exchanges
 
 ### 5.3 内部数据重建与职责分离
 
-- **FR-013**：系统必须从当前外部 train 主路由27,375条 Item 池出发，以 `dataset + prompt_group` 和 exact-answer/leakage component 的传递连通分量为不可拆分单元，使用固定种子和预注册算法分配到 `train_fit/train_calibration`；目标约80%/20%，不得为了比例拆开 group。
+- **FR-013**：系统必须从已通过 Semantic Readiness Gate 的 Dataset Semantic V2 外部 train 主路由 Item 池出发，以 dataset prompt group、source lineage 和 exact prompt-answer/leakage component 的传递连通分量为不可拆分单元，使用固定种子和预注册算法分配到 `train_fit/train_calibration`；目标约80%/20%，不得为了比例拆开 group，也不得沿用旧 Item 数量或旧 split assignment。
 - **FR-014**：系统不得直接拆分现有 `paper_train_*`；必须在两个内部 Item 池中分别重建固定5题 strict Paper，生成新的 internal `paper_id`，记录 leftover、来源外部 Paper 和构造版本。
 - **FR-015**：`train_fit` 只能用于训练 Router、Stop-Risk Head、quality/resource critics、其他可学习组件和正式能力画像主体，并生成预注册候选 checkpoint；不得读取 calibration/dev/test。
 - **FR-016**：`train_calibration` 只能冻结质量参考、预算与支持度边界，并对每个固定 checkpoint 自动校准 STOP 安全概率边界、组装 Policy Package；不得更新模型参数、进入 replay buffer、比较不同 checkpoint 的最终排名、选择最终 Router 或为主方法升级动作生成阈值。
@@ -247,7 +280,7 @@ max_a2a_exchanges
 - **FR-037**：系统必须报告 Reference Admission Feasible、Quality Champion、Quality Protection Feasible、Gate Error 处理、Severe/Extreme Error、Unsafe Stop、Stop Coverage、Deferral、dataset QWK、Macro-QWK、Macro/Micro-NMAE、QWK readiness、参考准入与冠军保护 Bootstrap 边界、资源、通信、预算耗尽和失败状态。
 - **FR-038**：每次运行必须使用唯一 `run_id`，保存配置、external/internal split 与 paper manifest 指纹、日志、predictions、checkpoints、reports 和 figures。
 - **FR-039**：所有正式表格和图必须能够从保存的 predictions、logs、config 和统计重采样产物重新计算。
-- **FR-040**：正式离线 cache 必须以 V1.4 internal manifests 作为 train 侧 split 来源，并冻结有限的 context/action support catalog；不在 catalog 中或缺少合法 active record 的动作必须被屏蔽并记录，所有方法共享同一 catalog，评价阶段不得在线补算。
+- **FR-040**：正式离线 cache 必须以 Dataset Semantic V2 internal manifests 作为 train 侧 split 来源，并冻结有限的 context/action support catalog；不在 catalog 中或缺少合法 active record 的动作必须被屏蔽并记录，所有方法共享同一 catalog，评价阶段不得在线补算。
 
 ### 5.7 继承的 V1.3 正式质量指标与统计门
 
@@ -262,7 +295,7 @@ max_a2a_exchanges
 
 ### 5.8 V1.4 内部拆分与职责审计
 
-- **FR-049**：现有外部 train Paper 只能作为来源溯源和主 Item 范围证据；内部训练、校准、Pilot 和 trajectory 脚本必须默认拒绝把原 `paper_train_*` 直接当作 `train_fit/train_calibration` episode。
+- **FR-049**：旧外部 train Paper 只能作为历史来源溯源证据，不得定义 Dataset Semantic V2 的主 Item 范围；内部训练、校准、Pilot 和 trajectory 脚本必须默认拒绝把旧 `paper_train_*` 直接当作 `train_fit/train_calibration` episode。
 - **FR-050**：系统必须生成 `internal_item_split_manifest.csv`、`papers_train_fit.jsonl`、`papers_train_calibration.jsonl`、`internal_paper_manifest.csv`、`leftover_items.csv` 和 `internal_split_audit.md`，并阻塞内部 Item、prompt group、exact-answer/leakage component、Paper overlap、跨 split 引用、5题数量和 strict mix 任一违规。
 - **FR-051**：主方法 calibration 只允许改变 STOP 安全概率边界；Mid/Strong/VERIFY/A2A/ARBITRATE 和下一 Item 由 Router 学习。阈值 baseline 可自动校准其自身边界，但必须与主方法共享 calibration split 和冻结门禁。
 - **FR-052**：系统必须记录 calibration 对每个 checkpoint 的边界与 failure，但 calibration 输出中不得出现跨 checkpoint 最终排名或 `selected_final_router=true`；唯一最终选择只能由 Dev selector 产生。
@@ -270,9 +303,35 @@ max_a2a_exchanges
 - **FR-054**：Fixture Smoke 必须标记 `execution_mode=fixture_smoke`、`is_fixture=true`、`formal_eligible=false`、`online_agent_calls=0`，并复用正式核心模块；任何 Formal loader、训练、画像、校准、选择或报告汇总收到 Fixture 资产时必须 fail closed。
 - **FR-055**：完整 Fixture Smoke 必须生成可审计 run manifest、source-path isolation audit、formal loader rejection probes、context support catalog、internal split/rebuild audit、capability support manifest、quality reference manifest、budget calibration manifest、per-checkpoint calibration records、Calibration/Policy Package、Dev gate/selection/freeze、test-like one-shot 报告和覆盖全部运行文件的 fixture artifact inventory；并记录所有禁止行为计数、STOP 边界实际应用/升级次数以及完整确定性检查。；run manifest 还必须记录完整实验源码树的逐文件 SHA-256 与聚合 `source_tree_hash`，使验收结果可与当次代码精确绑定。
 
+### 5.9 Dataset Semantic V2 数据整改
+
+- **FR-056**：Dataset Semantic V2 必须作为新的不可变 prepared data 版本生成，不得原地覆盖旧 Item、split、Paper 或 cache；构建 manifest 必须记录原始文件 SHA-256、转换规则版本、配置指纹、代码版本、接受数量、quarantine 数量和原因分布。
+- **FR-057**：ASAP-SAS 必须直接从官方数据描述资源恢复10个 EssaySet 的完整题目、必要 source context、官方 Rubric、分数范围和资源指纹；全部正式 Item 中指向 ZIP、附件或外部材料的占位文本数量必须为0。
+- **FR-058**：ASAP-SAS 的正式 `gold_score` 必须等于 `Score1`；`Score2` 只能作为 inter-rater reliability metadata，禁止平均、校准或进入 Agent 请求、Router 状态和主质量指标。
+- **FR-059**：ASAP-SAS 主实验不得使用完整 Anchor Paper PDF 或从 `train_fit` 选择的已评分回答示例；官方 Rubric 原文可以保留。题目必要图片必须作为带原始哈希、MIME、来源 URI 和稳定相对路径的 source asset 保存；结构化转录只能作为可选辅助字段，不能替代或修改原始图片，且所有方法共享相同资产。
+- **FR-060**：DREsS 主实验只使用 DREsS_Std 和 DREsS_New 的合法非空作文；DREsS_CASE 不得进入主 train/dev/test，也不得以同源增强样本形式跨 split 出现。
+- **FR-061**：DREsS 主实验必须固定 `anchor_mode=none`，使用 Content、Organization、Language 三维任务定义，每维合法范围为 `[0,5]`，总分范围为 `[0,15]`；所有 baseline、消融和主方法共享完全相同的无 Anchor Prompt 和 Agent cache。
+- **FR-062**：DREsS 必须以三个 Trait Gold 的和构造 `gold_score`；原始 `total` 缺失或不一致不得覆盖合法 Trait，也不得静默丢弃合法作文，但必须记录差异。作文为空、Trait 缺失、越界或不可解析的记录必须 quarantine。
+- **FR-063**：DREsS 评分 Agent 必须输出三个可校验 Trait 分数以及严格等于三者之和的 `pred_score`；正式报告除总分 NMAE/QWK 外，还必须报告三个 Trait 的误差、偏差和 Trait-Macro 指标，防止总分误差抵消掩盖维度错误。
+- **FR-064**：SAS-Bench 主实验必须以一条顶层学生完整回答作为一个 Item，按原始 Step 顺序重建模型可见完整回答；不得把单个 Step 继续作为主实验 Item，也不得使用完整题目的总分范围评价单个 Step。
+- **FR-065**：SAS-Bench 必须使用 `manual_label` 作为完整回答 Gold、使用 `total` 作为该 Item 满分，并对中英文来源、问题 ID、Step 数量/顺序和数字标签执行一一对应审计；`analysis` 与 `reference` 至少一个必须可用于评分。
+- **FR-066**：SAS-Bench 的 Step label、Step error 和其他 Gold annotation 只能作为隐藏审计或补充评价字段，不得进入 Agent 请求；空 Step 带非零标签、`manual_label > total`、完整分与 Step 和不一致、来源无法对齐或必要语义同时缺失的记录必须 quarantine。
+- **FR-067**：系统必须生成 Dataset Semantic V2 的数据集专用 Semantic Readiness 报告；任一全局或数据集专用检查失败时，`formal_cache_eligible=false`，真实 Agent cache、能力画像、Router 训练和 final evaluation 入口必须 fail closed。
+- **FR-068**：Dataset Semantic V2 必须重新生成 Item ID、prompt group、split manifest、Paper 和内部 split；ASAP-SAS 按 EssaySet 分组，DREsS 按来源与完整规范化 Prompt 分组，SAS-Bench 按来源问题 ID 分组。分配算法不得使用 test Gold 调整比例或事后修订。
+- **FR-069**：旧 100 Item Pilot 只允许作为 cliproxy 连通性、模型身份、结构化输出、Token 和成本账本的工程证据；其 predictions、Agent 能力结论和 cache records 不得进入 Dataset Semantic V2 的能力画像、Router 训练、Baseline、Formal cache 或论文主结果。
+- **FR-070**：Dataset Semantic V2 通过离线审计后，真实 Agent 验证必须按“1份5题 checkpoint，仅 Cheap/Mid/Strong，共15次调用”再到“30 Item Pilot，仅 Cheap/Mid/Strong，共90次调用”的顺序执行；两个阶段均不得调用 Evidence/Arbitrator，未通过前不得启动新的100 Item Formal Pilot或1,000 Item耐久测试。
+- **FR-071**：模型可见 Item 必须采用显式白名单投影；白名单可包含经过校验的 `source_assets`，但实际序列化请求中出现 `gold_score`、DREsS Gold Trait、ASAP `Score1/Score2`、SAS `manual_label/Step label/Step error` 或等价字段的次数必须为0。
+- **FR-072**：Dataset Semantic V2 数据构建必须与具体本地模型、Tokenizer、视觉 Processor、GPU 和推理引擎解耦；数据阶段不得预先计算模型专用 Token、执行模型专用缩放或把某一模型的图像表示写入正式 Item。
+- **FR-073**：自托管多模态 Agent 在 cache 阶段必须从 Item 的稳定 source asset 解析图片，并记录实际模型/Processor产生的文本 Token、视觉 Token、缩放参数和输入 hash；这些运行时字段不得反向修改 prepared data。
+- **FR-074**：从 API 调用改为租用服务器自托管只允许改变 Agent 执行与成本来源，不得改变三个数据集的 Gold、Scoring Unit、无 Anchor 协议、split、Paper 或 Semantic Readiness 标准。
+
 ## 6. 关键实体
 
-- **Item**：单条真实学生作答及其题目、Rubric/reference、分值范围、gold 和来源 metadata。
+- **Dataset Semantic V2 Item**：按数据集真实 Scoring Unit 构造的单条学生作答；包含模型可见题目、作答、Rubric/reference、分值范围，以及模型不可见 Gold、评分模式、来源指纹和正式资格 metadata。
+- **Dataset Resource Catalog**：从原始官方资料恢复并冻结的题目、source context、Rubric、分数范围、图像资产和资源 hash 目录。
+- **Model-Visible Item View**：从 Item 白名单投影得到的真实 Agent 请求输入，禁止包含任何 Gold、隐藏 Trait、Step label/error 或只供审计的来源字段。
+- **Quarantine Record**：未进入正式 Item 的原始记录、来源标识、失败原因和转换版本，不包含自动猜测的替代内容。
+- **Semantic Readiness Report**：证明 Dataset Semantic V2 在全局完整性、数据集语义、范围、来源、泄漏、Paper 和 Gold 隔离上是否具备 Formal cache 资格的门禁报告。
 - **External Simulated Paper**：prepared data 阶段构造的固定5题 episode；外部 train Paper 在 V1.4 只作来源溯源，Dev/Test Paper 保持正式评价用途。
 - **Internal Item Split Manifest**：将外部 train 主路由 Item 的 prompt/leakage connected component 分配到 `train_fit/train_calibration` 的冻结记录。
 - **Internal Rebuilt Paper**：在单个内部 Item split 内重新构造的固定5题 strict episode，使用 `paper_train_fit_*` 或 `paper_train_calibration_*` 新 ID。
@@ -303,7 +362,7 @@ max_a2a_exchanges
 
 - **SC-001**：Prepared data audit 为 PASS，Item、Prompt、Paper 和 exact prompt-answer 跨 split 泄漏均为0。
 - **SC-002**：100% 主实验 Paper 满足固定5题和 strict mix 规则；Paper 引用不存在或跨 split Item 的数量为0。
-- **SC-003**：100% 接受的正式 Agent cache records 满足 schema、gold 隔离、模式隔离、context 可追踪和 V1.4 internal split 一致性要求。
+- **SC-003**：100% 接受的正式 Agent cache records 满足 Dataset Semantic V2 schema、Gold 隔离、模式隔离、context 可追踪和新 internal split 一致性要求。
 - **SC-004**：Router 在任何决策步骤都无法读取未调用 Agent 输出，相关阻塞性集成测试全部通过。
 - **SC-005**：质量指标协议、质量参考、STOP 安全概率边界、预算档位、Quality Champion、质量保护门和策略包选择均由预注册程序产生或冻结；calibration 与 Dev 各自生成职责独立的可审计 manifest。
 - **SC-006**：Dev 不含人工操作；相同输入、种子和候选集合的两次运行，必须输出相同参考准入状态、同一个 Quality Champion、相同候选对冠军保护状态、相同跨预算资源排序和唯一预算条件 Policy Package/checkpoint。
@@ -326,6 +385,18 @@ max_a2a_exchanges
 - **SC-023**：Dev 输入的所有 Package 边界在进入 Dev 前已冻结；Dev 边界修改次数为0，Quality Champion 人工替换次数为0，并且相同候选、种子和 manifests 两次运行输出相同冠军、质量保护集合和唯一最终 Package/checkpoint。
 - **SC-024**：完整 Fixture Smoke 的正式数据读取、正式入口误接受、在线 Agent 调用、跨模式 cache 复用、calibration 梯度、calibration replay、calibration checkpoint ranking、Dev 边界更新、Quality Champion 资源字段参与、人工替换和 test-like 训练读取计数全部为0；其中正式数据读取必须由路径白名单阻塞，正式入口误接受必须由实际 fail-closed 探针计算，不得仅写死为0。；`quality_champion_resource_reads=0` 必须由冠军排序阶段的资源字段结构性隔离与读取守卫证明，不得只写常量0。
 - **SC-025**：Fixture Smoke 产物100%内嵌 `formal_eligible=false` 或被 `fixture_artifact_manifest.json` 逐文件哈希覆盖并绑定 `formal_eligible=false`，未纳入 inventory 的运行文件数为0，正式实验入口对这些产物的接受次数为0；Smoke 通过只证明流水线契约成立，不得作为真实 Agent 质量或论文效果证据。
+- **SC-026**：ASAP-SAS 的10个 EssaySet 资源均成功恢复；正式 Item 中 ZIP/附件占位数量为0，17,043条源作答全部使用 `Score1` 作为 Gold，`Score1/Score2` 平均值作为 Gold 的记录数为0。
+- **SC-027**：DREsS 正式 Item 100%包含合法 Content、Organization、Language Gold，`gold_score` 与三维和不一致的记录数为0；空作文全部进入 quarantine，DREsS_CASE 和主实验 Anchor 的接受数均为0。
+- **SC-028**：SAS-Bench 每个接受的顶层完整回答恰好生成一个 Item，单 Step 主实验 Item 数为0；`gold_score=manual_label`、`score_max=total`、Gold 范围合法和 Step 顺序完整四项通过率均为100%。
+- **SC-029**：所有被排除的 ASAP-SAS、DREsS 和 SAS-Bench 原始记录均能在 quarantine manifest 中找到唯一来源和至少一个明确 reason code；静默跳过记录数为0。
+- **SC-030**：Dataset Semantic V2 的 Semantic Readiness 状态为 PASS 且 `formal_cache_eligible=true`；Item、Prompt、source lineage、Paper 和 exact prompt-answer 跨 split 泄漏均为0。
+- **SC-031**：随机抽查和自动扫描的实际 Agent 序列化请求中，Gold、隐藏 Trait、Score1/Score2、manual_label、Step label/error 或等价信息的出现次数为0。
+- **SC-032**：旧 prepared data、旧 Item/Paper ID 和旧 100 Item Pilot cache 被 Dataset Semantic V2 正式入口接受或复用的次数为0；旧 Pilot 在论文主评分表、能力画像和 Router replay buffer 中的记录数为0。
+- **SC-033**：Dataset Semantic V2 的5 Item checkpoint 在15次 Cheap/Mid/Strong 调用中完成模型身份、结构化输出、范围、DREsS 三维求和、SAS 完整回答和单次成本记账验收；未通过时30 Item Pilot调用数为0。
+- **SC-034**：只有5 Item checkpoint 通过后才允许完成30 Item、90次 Cheap/Mid/Strong Pilot，并产出分数据集质量、输出退化、Agent 分歧、Best-fixed 与 Item Oracle headroom 诊断；在该报告审批前新的100 Item Formal Pilot和1,000 Item耐久测试调用数均为0。
+- **SC-035**：ASAP-SAS 官方描述中的全部图片资产均保留原始字节哈希、MIME、来源 URI 和可解析相对路径；必要图片被静默丢失、仅保留人工转录或写入模型专用视觉表示的数量均为0。
+- **SC-036**：Dataset Semantic V2 Item 与资源目录不包含任何具体模型 Tokenizer、视觉 Processor、GPU 或推理引擎生成的 Token/embedding；模型专用图像处理只出现在后续 Agent cache 运行产物。
+- **SC-037**：相同 Dataset Semantic V2 资产可由本地自托管 Agent 或另行批准的 API Agent 消费，二者使用完全相同的 Gold、split、Paper 和模型可见语义字段。
 
 ## 8. 非目标
 
@@ -337,6 +408,9 @@ max_a2a_exchanges
 - 不让 `train_calibration` 承担最终 Router/checkpoint 选择。
 - 不在第一版建模真实异步并发 makespan。
 - 不把 HumanAgent 作为核心动作，除非后续单独设计并批准。
+- 不在主实验中使用从 `train_fit` 选择的 Anchor、DREsS_CASE 或 SAS-Bench 单 Step Item；这些方向如后续研究必须独立审批和报告。
+- 不把官方数据中不存在的 Rubric、参考答案、Step 满分或人工标签凭空补写进正式数据。
+- 不要求基础 Agent 的绝对准确率先达到生产部署标准，但不允许使用语义缺失、评分单位错误、常数输出或接近随机的退化环境支持算法结论。
 - 不为了获得资源收益而放宽评分质量或严重错分要求。
 - 不根据 test 结果修改 Prompt、阈值、预算、参考策略或 checkpoint。
 - 不建设生产级 Web、教师端、学生端、账号或权限系统。
@@ -346,11 +420,13 @@ max_a2a_exchanges
 ## 9. 假设
 
 - 第一版是离线论文实验流水线，Agent cache 用于公平复用和反事实轨迹构建。
-- 三个现有数据集继续使用，不引入额外人工标签，不扩展当前外部 train 主路由27,375条 Item 范围。
+- 三个现有数据集继续使用，不引入额外人工评分标签；因评分单位修正、空作答和结构异常 quarantine，Dataset Semantic V2 的 Item 数量允许与旧 prepared data 不同，并以冻结 build manifest 为准。
+- ASAP-SAS 的原始图片资产必须保留；来源核验转录只作为可选辅助信息，不视为新增人工标签，也不得替代原图。任何无法恢复或校验的必要图片都应导致对应 EssaySet readiness failure。
+- DREsS 主实验默认无 Anchor；所有方法共享相同无 Anchor Prompt、数据和 cache。绝对指标可以不高，但至少必须通过语义有效性、输出非退化和可利用路由空间诊断，论文结论只声称动态路由相对改进，不声称达到生产级阅卷准确率。
 - Gold 仅用于 train_fit 监督、train_calibration 自动校准、Dev 选择和最终离线评价，不进入 Agent 请求或 Router 在线状态。
-- 当前外部 train Paper 因 prompt group 连接不能直接拆分；内部 Item 分配和 Paper 重建将在实现前按固定算法完成并冻结 manifests。
+- 旧外部 Paper、旧 Item ID、旧 split manifest 和旧 cache 在 Dataset Semantic V2 中只作历史溯源；内部 Item 分配和 Paper 重建将在实现前按固定算法完成并冻结新 manifests。
 - 内部拆分以约80%/20%为目标，但 prompt/leakage component 完整性、strict Paper 可构造性和可审计性优先于精确比例。
-- 正式 Agent 模型、Prompt、真实费用和延迟必须经过从重建后的完整 strict `train_fit` Paper 抽取约100个 Item（约20份5题 Paper）的 Pilot 后冻结。
+- 正式 Agent 模型、Prompt、真实费用和延迟必须先通过 Dataset Semantic V2 的1份5题 checkpoint 和30 Item Pilot；是否进入新的100 Item Formal Pilot由30 Item报告审批决定，1,000 Item耐久性验证不在当前批准范围。
 - 当前 fixture 预算仅用于工程 smoke；Pilot 只估算可行性，正式预算由冻结 cache 上重建的 `train_calibration` Paper 和固定 behavior/reference policies 自动生成。
 - `train_calibration` 不产生最终 checkpoint 排名；每个 checkpoint 只得到 STOP 边界或 calibration failure，最终选择仅由 Dev selector 产生。
 - V1.3 的 Gate Error、Severe/Extreme 阈值、Unsafe Stop 分母、Macro-NMAE、11档 QWK、readiness、Bootstrap 参数和 Dev 排序继续冻结，V1.4 不改变这些定义。

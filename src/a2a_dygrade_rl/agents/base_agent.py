@@ -1,4 +1,4 @@
-﻿"""Shared Agent wrapper contract."""
+"""Shared Agent wrapper contract."""
 
 from __future__ import annotations
 
@@ -8,27 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from a2a_dygrade_rl.utils.llm_client import LLMClient
-
-
-VISIBLE_ITEM_FIELDS = (
-    "item_id",
-    "dataset",
-    "question_type",
-    "subject",
-    "prompt",
-    "student_answer",
-    "reference_answer",
-    "rubric",
-)
+from a2a_dygrade_rl.utils.model_input import project_model_visible_item, strip_banned_fields
 
 
 def strip_gold(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {key: strip_gold(child) for key, child in value.items() if key != "gold_score"}
-    if isinstance(value, list):
-        return [strip_gold(child) for child in value]
-    return value
+    """历史兼容名称：递归移除所有模型不可见 Gold/标签字段。"""
 
+    return strip_banned_fields(value)
 
 class BaseAgent(ABC):
     role = "base"
@@ -47,7 +33,7 @@ class BaseAgent(ABC):
         self.prompt_hash = hashlib.sha256(self.prompt_text.encode("utf-8")).hexdigest()
 
     def build_request(self, item: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, Any]:
-        request = {field: item.get(field, "") for field in VISIBLE_ITEM_FIELDS}
+        request = project_model_visible_item(item)
         request.update(
             {
                 "score_range": {"min": float(item["score_min"]), "max": float(item["score_max"])},

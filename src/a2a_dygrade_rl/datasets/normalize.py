@@ -39,6 +39,7 @@ def stable_id(dataset: str, prompt_group: str, answer: str, fallback: str = "") 
 
 def score_range(score_min: float, score_max: float) -> float:
     """返回单题分数范围 R_i，非法范围直接失败。"""
+
     value = float(score_max) - float(score_min)
     if value <= 0:
         raise ValueError(f"score_max 必须大于 score_min，当前 R_i={value}")
@@ -47,6 +48,7 @@ def score_range(score_min: float, score_max: float) -> float:
 
 def normalized_score_error(pred_score: float, gold_score: float, score_min: float, score_max: float) -> float:
     """按实验设计方案计算归一化评分误差 E_i。"""
+
     return abs(float(pred_score) - float(gold_score)) / score_range(score_min, score_max)
 
 
@@ -58,6 +60,34 @@ def normalize_record(record: dict[str, Any], dataset_config: dict[str, Any]) -> 
     item_id = stable_id(dataset, prompt_group, answer, str(first_present(record, FIELD_ALIASES["item_id"])).strip())
     score_min = float(first_present(record, FIELD_ALIASES["score_min"], dataset_config.get("score_min", 0)))
     score_max = float(first_present(record, FIELD_ALIASES["score_max"], dataset_config.get("score_max", 1)))
+    schema_version = str(record.get("schema_version") or dataset_config.get("schema_version") or "item_v1")
+    scoring_unit = str(record.get("scoring_unit") or dataset_config.get("scoring_unit") or "response")
+    scoring_mode = str(record.get("scoring_mode") or dataset_config.get("scoring_mode") or "holistic")
+    source_assets = [dict(asset) for asset in (record.get("source_assets") or [])]
+    reference_answer = str(first_present(record, FIELD_ALIASES["reference_answer"], ""))
+    rubric = str(
+        first_present(
+            record,
+            FIELD_ALIASES["rubric"],
+            dataset_config.get("default_rubric", "按数据集原始评分标准评分。"),
+        )
+    )
+    metadata = dict(record.get("metadata") or {})
+    metadata.update(
+        {
+            "prompt_group": prompt_group,
+            "source_fields": sorted(record.keys()),
+            "prompt_length": len(prompt),
+            "answer_length": len(answer),
+            "rubric_length": len(rubric),
+            "has_reference": bool(reference_answer.strip()),
+            "formal_eligible": record.get("formal_eligible", dataset_config.get("formal_eligible", True)),
+            "semantic_version": schema_version,
+            "scoring_unit": scoring_unit,
+            "scoring_mode": scoring_mode,
+            "source_asset_count": len(source_assets),
+        }
+    )
     item = Item(
         item_id=item_id,
         dataset=dataset,
@@ -65,18 +95,16 @@ def normalize_record(record: dict[str, Any], dataset_config: dict[str, Any]) -> 
         subject=str(first_present(record, FIELD_ALIASES["subject"], "")),
         prompt=prompt,
         student_answer=answer,
-        reference_answer=str(first_present(record, FIELD_ALIASES["reference_answer"], "")),
-        rubric=str(first_present(record, FIELD_ALIASES["rubric"], dataset_config.get("default_rubric", "按数据集原始评分标准评分。"))),
+        reference_answer=reference_answer,
+        rubric=rubric,
         gold_score=float(first_present(record, FIELD_ALIASES["gold_score"])),
         score_min=score_min,
         score_max=score_max,
-        metadata={
-            "prompt_group": prompt_group,
-            "source_fields": sorted(record.keys()),
-            "prompt_length": len(prompt),
-            "answer_length": len(answer),
-            "has_reference": bool(first_present(record, FIELD_ALIASES["reference_answer"], "")),
-        },
+        schema_version=schema_version,
+        scoring_unit=scoring_unit,
+        scoring_mode=scoring_mode,
+        source_assets=source_assets,
+        metadata=metadata,
     ).to_dict()
     validate_item(item)
     return item

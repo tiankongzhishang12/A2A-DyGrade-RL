@@ -1,0 +1,111 @@
+run:
+  seed: 42
+  rule_version: dataset_semantic_group_v2
+
+prepared_data:
+  root: data/processed/semantic_v2
+  item_schema_version: item_semantic_v2
+  model_independent: true
+  tokenizer_preprocessing: forbidden
+  visual_processor_preprocessing: deferred_to_agent_cache
+  embedding_precomputation: forbidden
+
+# 数据阶段只恢复评分语义与原始资产，不绑定具体自托管模型。
+datasets:
+  - name: asap_sas
+    enabled: true
+    raw_path: data/raw/asap_sas
+    question_type: short_answer
+    schema_version: item_semantic_v2
+    scoring_unit: whole_response
+    scoring_mode: holistic
+    required_essay_sets:
+      - "1"
+      - "2"
+      - "3"
+      - "4"
+      - "5"
+      - "6"
+      - "7"
+      - "8"
+      - "9"
+      - "10"
+  - name: dress
+    enabled: true
+    raw_path: data/raw/dress
+    question_type: essay
+    score_min: 0
+    score_max: 15
+    schema_version: item_semantic_v2
+    scoring_unit: whole_response
+    scoring_mode: analytic_three_dimension
+  - name: sas_bench
+    enabled: true
+    raw_path: data/raw/sas_bench/datasets_en
+    annotation_raw_path: data/raw/sas_bench/datasets
+    pattern: "*.translated.jsonl"
+    question_type: short_answer
+    schema_version: item_semantic_v2
+    scoring_unit: whole_response
+    scoring_mode: holistic_total_score
+
+splits:
+  mode: global_prompt_lineage_exact_answer
+  train: 0.7
+  dev: 0.1
+  test: 0.2
+
+paper:
+  min_items: 5
+  max_items: 5
+  target_items: 5
+  mix_mode: strict
+  rule_version: dataset_semantic_paper_v2
+  id_prefix: paper_semantic_v2
+  budget_status: provisional_pre_agent_cache
+  strict_quotas:
+    - asap_sas: 2
+      sas_bench: 2
+      dress: 1
+    - asap_sas: 3
+      sas_bench: 1
+      dress: 1
+  budgets:
+    max_cost: 0.20
+    max_elapsed_time: 30.0
+    max_agent_calls: 12
+    max_a2a_exchanges: 6
+
+internal_split:
+  enabled: true
+  source_split: train
+  source_scope: external_train_strict_paper_items
+  assignment_unit: item_component
+  legacy_paper_assignment: forbidden
+  train_fit_ratio: 0.8
+  train_calibration_ratio: 0.2
+  seed: 20260811
+  rule_version: internal_item_component_semantic_v2
+  component_relations:
+    - dataset_prompt_group
+    - exact_prompt_answer
+    - source_lineage
+    - existing_leakage_component
+  optimization_priority:
+    - component_integrity
+    - both_splits_cover_all_datasets_and_support_strict_papers
+    - maximize_total_strict_five_item_papers
+    - minimize_target_ratio_deviation
+    - stable_hash_tie_break
+  reject_source_splits:
+    - dev
+    - test
+
+internal_paper:
+  rebuild_separately: true
+  inherit_legacy_paper_id: false
+  cross_split_borrowing: forbidden
+  repeated_item_reference: forbidden
+  fixed_item_count: 5
+  record_leftovers: true
+  rule_version: internal_strict_paper_semantic_v2
