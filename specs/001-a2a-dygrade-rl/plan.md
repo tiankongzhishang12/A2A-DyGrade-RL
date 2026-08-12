@@ -1,9 +1,58 @@
-﻿# 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
+# 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
 
 **分支**：`001-a2a-dygrade-rl`
-**日期**：2026-07-29
+**日期**：2026-08-11
 **规格**：[spec.md](./spec.md)
 **依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.3、`AGENTS.md` 1.4.0
+
+---
+
+## V1.5 Dataset Semantic V2 实施修订
+
+本修订覆盖下文仍保留的 V1.4 历史数据规模、旧 CLIProxy Pilot 和“External Prepared Data 已完成”等表述；冲突时以本节、V1.5 spec 和仓库根目录 AGENTS.md 为准。用户已明确要求先完成数据整改，并确认后续真实 Agent 改为租用服务器自托管；本轮不得下载模型、安装新依赖或调用真实推理服务。
+
+### 数据层是否因租服务器而改变
+
+Gold、Scoring Unit、无 Anchor 协议、train/dev/test 防泄漏、五题 Paper 和 quarantine 规则不变。需要新增的只有多模态资产契约：ASAP-SAS 必要图片保存原始字节、SHA-256、MIME、来源 URI 和稳定相对路径；prepared data 不绑定具体 Tokenizer、视觉 Processor、GPU 或推理引擎。模型专用缩放、视觉 Token 和 Token 用量只在后续 Agent cache 阶段生成。
+
+### 本轮技术路线
+
+1. 不新增第三方依赖；使用 Python 标准库直接解析 ZIP、DOCX XML、TSV 和 JSONL，原始数据保持只读。
+2. 新数据写入 data/processed/semantic_v2/，旧 data/processed 根目录产物保留为 legacy，不覆盖、不复用。
+3. ASAP-SAS 从 Data_Set_Descriptions.zip 恢复10个 EssaySet 的正式 Prompt、Rubric、分数范围和图片；Gold 使用 Score1，Score2 仅作隐藏审计，Training_Materials.zip Anchor Paper 不进入模型输入。
+4. DREsS 只使用 Std/New 非空作文，Content/Organization/Language 每维0到5，总分由三维相加；缺失或冲突 raw total 只记录，DREsS_CASE 排除。
+5. SAS-Bench 以完整顶层回答为一个 Item；英文文本与中文权威标签按来源文件和 ID 对齐，gold_score=manual_label、score_max=total，Step label/error 隐藏。
+6. 所有不可接受记录写入 quarantine_manifest.csv；构建同时生成资源目录、source hash、build manifest 和数据集计数。
+7. 全量重新生成 Item、split manifest、外部 strict Paper、内部 train_fit/train_calibration split 与 Paper；不得沿用旧 Item/Paper/cache ID。
+8. 新增 fail-closed Semantic Readiness 报告，只有数据、资源、泄漏、Paper 和 Gold 隔离全部通过才允许后续5 Item本地模型 checkpoint。
+
+### 版本化产物
+
+- prepared root：data/processed/semantic_v2/
+- Item schema：item_semantic_v2
+- split rule：dataset_semantic_group_v2
+- Paper rule：dataset_semantic_paper_v2
+- internal split rule：internal_item_component_semantic_v2
+- 运行报告：outputs/runs/<run_id>/reports/
+
+### 2026-08-11 实施结果
+
+本轮使用唯一 `run_id=dataset_semantic_v2_build_20260811_001` 完成全量重建：
+
+- 正式 Item 共29,451条：ASAP-SAS 17,043、DREsS 8,487、SAS-Bench 3,921。
+- quarantine 共506条：DREsS 空作文300条；SAS-Bench 结构/标签异常206条。
+- 外部 split：train 20,637、dev 2,897、test 5,917；每个数据集均覆盖三个 split，跨数据集 exact prompt-answer 泄漏为0。
+- ASAP-SAS 原始图片4个：EssaySet 3和4各1个 JPEG，EssaySet 10含2个 TIFF；原始字节、MIME、SHA-256 和相对路径均通过审计。
+- 外部 strict Paper 共3,921份，使用19,605条 Item；9,846条未使用 Item 已写入 `external_leftover_items.csv`，跨 split 借用和重复引用均为0。
+- 外部 train 主范围为13,710条 Item；内部重建得到 `train_fit` 11,635条/2,327份 Paper，`train_calibration` 2,075条/415份 Paper，内部 leftover 为0。
+- 内部比例为84.865%/15.135%，未强行凑成80%/20%；原因是完整 prompt/leakage component 与 strict 5题配比优先，符合本计划的优先级约束。
+- 通用 prepared audit、Semantic Readiness 和 internal audit 全部 PASS；最终全仓测试152项通过（包含 Gold-context 递归隔离测试）。
+- `online_agent_calls`、`model_downloads`、`dependency_installs`、`raw_data_writes`、`training_material_anchor_reads`、`model_specific_preprocessing_records` 均为0。
+
+下一阶段只能从本次冻结的 Semantic V2 manifests 进入自托管模型5 Item checkpoint；模型选择、权重下载、服务器环境和 Agent cache 仍需单独审批。
+### 测试与门禁顺序
+
+schema/fixture测试 -> 三个loader单元测试 -> 小样本集成测试 -> 全量Item构建 -> split泄漏检查 -> 外部Paper构建 -> prepared audit -> Semantic Readiness -> 内部split/Paper重建 -> internal audit。任一步失败即停止；不以真实模型调用验证数据正确性。
 
 ---
 

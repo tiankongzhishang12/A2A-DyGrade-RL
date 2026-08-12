@@ -1,4 +1,4 @@
-﻿# 任务清单：面向模拟试卷级自动阅卷的质量约束 A2A-DyGrade-RL 实验流水线
+# 任务清单：面向模拟试卷级自动阅卷的质量约束 A2A-DyGrade-RL 实验流水线
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
@@ -215,6 +215,43 @@
 - [ ] T071 运行完整测试套件，将命令、V1.3 指标/Bootstrap 固定种子重复性、V1.4 internal split/rebuild 确定性和 calibration/Dev 职责隔离结果写入 `outputs/runs/<run_id>/logs/test_run.log`，并在临时目录完成仓库结构规范校验后删除临时脚本与数据
 
 ---
+
+
+## Phase 8：Dataset Semantic V2 数据整改与自托管多模态准备（优先级：P1，当前执行）
+
+**目标**：在不下载模型、不调用API、不修改原始数据的前提下，生成语义正确、无Anchor、支持本地多模态模型且通过泄漏门禁的新 prepared data。
+
+### 规格与测试先行
+
+- [X] T072 [US1] 更新 spec.md、plan.md、data-model.md、quickstart.md 与规格质量清单，冻结 Dataset Semantic V2 和模型无关 source asset 契约
+- [X] T073 [P] [US1] 在 tests/unit/test_dataset_semantic_v2.py 中添加 ASAP-SAS DOCX/图片资源、Score1 Gold、Anchor 排除测试
+- [X] T074 [P] [US1] 在 tests/unit/test_dataset_semantic_v2.py 中添加 DREsS 三维 Gold、total 重建、空作文 quarantine、CASE 排除测试
+- [X] T075 [P] [US1] 在 tests/unit/test_dataset_semantic_v2.py 中添加 SAS-Bench whole-response、中英文来源对齐、manual_label/total 和隐藏 Step Gold 测试
+- [X] T076 [P] [US1] 在 tests/integration/test_dataset_semantic_v2_pipeline.py 中添加 build manifest、quarantine、source asset、split leakage、Gold 白名单与 Semantic Readiness fail-closed 集成测试
+
+### Schema、资源与 Loader
+
+- [X] T077 [US1] 新增 DatasetLoadResult、quarantine record 和 build manifest 结构，保持旧 loader 列表接口兼容
+- [X] T078 [US1] 扩展 Item Semantic V2 字段和模型可见白名单，加入 scoring_unit、scoring_mode、schema_version 与 source_assets，禁止模型专用 Token/视觉表示进入 prepared data
+- [X] T079 [US1] 实现 ASAP-SAS ZIP/DOCX XML 资源目录解析、图片原字节提取、Prompt/Rubric 恢复和 Score1 Gold loader
+- [X] T080 [US1] 重写 DREsS loader，使用无Anchor三维评分、三维求和 total、空作文 quarantine 并排除 DREsS_CASE
+- [X] T081 [US1] 重写 SAS-Bench loader，以完整顶层回答为 Item，对齐英文文本与中文标签，使用 manual_label/total 并隔离 Step Gold
+
+### 构建、门禁与产物
+
+- [X] T082 [US1] 扩展 build_items 生成 resources、quarantine_manifest.csv、dataset_build_manifest.json 和 versioned Item/split 产物
+- [X] T083 [US1] 加强 split 与 leakage 校验，使用完整 prompt group/source lineage 并检查跨数据集 exact prompt-answer 泄漏
+- [X] T084 [US1] 扩展外部 strict Paper 构建，生成外部 leftover 清单并记录新 Paper rule/version
+- [X] T085 [US1] 新增 semantic_readiness.py 与 CLI，执行数据集专用语义、图片资源、Gold 隔离、manifest、split 和 Paper fail-closed 审计
+- [X] T086 [US1] 新增 configs/dataset_semantic_v2.yaml 并更新数据构建/审计 CLI 的 versioned 默认路径和运行产物说明
+
+### 全量重建与验证
+
+- [X] T087 [US1] 运行新增及受影响单元/集成测试，修复回归并保存测试日志
+- [X] T088 [US1] 使用唯一 run_id 全量构建 data/processed/semantic_v2 Item、资源、quarantine 和 split manifest
+- [X] T089 [US1] 构建外部5题 strict Paper，运行 prepared data audit 与 Semantic Readiness，阻塞任何失败
+- [X] T090 [US1] 从新外部 train Paper 范围重建 train_fit/train_calibration Item split 与 strict Paper，并运行 internal audit
+- [X] T091 [US1] 更新任务状态并执行 spec/plan/tasks/实现一致性复核；未下载模型、未安装依赖、未调用真实 Agent 的计数必须为0
 
 ## 依赖关系与执行顺序
 
