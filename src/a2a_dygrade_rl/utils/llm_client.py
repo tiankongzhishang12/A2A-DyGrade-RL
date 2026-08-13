@@ -1,4 +1,4 @@
-﻿"""Provider-neutral LLM client contracts, fixture client and Responses-compatible real client."""
+"""Provider-neutral LLM client contracts, fixture client and Responses-compatible real client."""
 
 from __future__ import annotations
 
@@ -51,6 +51,44 @@ AGENT_RESPONSE_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+SELFHOSTED_AGENT_RESPONSE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "pred_score": {"type": "number"},
+        "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
+        "justification": {"type": "string"},
+        "evidence": {
+            "type": "object",
+            "properties": {
+                "matched_points": {"type": "array", "items": {"type": "string"}},
+                "missing_points": {"type": "array", "items": {"type": "string"}},
+                "concerns": {"type": "array", "items": {"type": "string"}},
+                "participating_agents": {"type": "array", "items": {"type": "string"}},
+                "recommend_escalation": {"type": "boolean"},
+            },
+            "required": [
+                "matched_points",
+                "missing_points",
+                "concerns",
+                "participating_agents",
+                "recommend_escalation",
+            ],
+            "additionalProperties": False,
+        },
+        "trait_scores": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "number", "minimum": 0.0, "maximum": 5.0},
+                "organization": {"type": "number", "minimum": 0.0, "maximum": 5.0},
+                "language": {"type": "number", "minimum": 0.0, "maximum": 5.0},
+            },
+            "additionalProperties": False,
+        },
+    },
+    "required": ["pred_score", "confidence", "justification", "evidence", "trait_scores"],
+    "additionalProperties": False,
+}
+
 
 @dataclass(frozen=True)
 class ClientResponse:
@@ -66,7 +104,7 @@ class LLMClient(ABC):
     is_fixture = False
 
     @abstractmethod
-    def complete(self, request: dict[str, Any], agent_id: str) -> ClientResponse:
+    def complete(self, request: dict[str, Any], agent_id: str, logical_call_id: str | None = None) -> ClientResponse:
         raise NotImplementedError
 
     def initialize_budget(self, *, calls: int, cost_usd: float) -> None:
@@ -106,7 +144,8 @@ class OpenAIResponsesClient(LLMClient):
     def budget_snapshot(self) -> dict[str, Any]:
         return self.budget.snapshot()
 
-    def complete(self, request: dict[str, Any], agent_id: str) -> ClientResponse:
+    def complete(self, request: dict[str, Any], agent_id: str, logical_call_id: str | None = None) -> ClientResponse:
+        del logical_call_id
         if _contains_key(request, "gold_score"):
             raise ValueError("真实 Agent 请求中禁止包含 gold_score")
         if agent_id not in self.agent_configs:
@@ -294,7 +333,8 @@ class FixtureClient(LLMClient):
     def __init__(self, seed: int = 42):
         self.seed = int(seed)
 
-    def complete(self, request: dict[str, Any], agent_id: str) -> ClientResponse:
+    def complete(self, request: dict[str, Any], agent_id: str, logical_call_id: str | None = None) -> ClientResponse:
+        del logical_call_id
         if _contains_key(request, "gold_score"):
             raise ValueError("Agent 请求中禁止包含 gold_score")
         score_min = float(request["score_range"]["min"])
@@ -358,15 +398,39 @@ class FixtureClient(LLMClient):
 
 
 def build_llm_client(config: dict[str, Any], execution_mode: str, seed: int) -> LLMClient:
-    if execution_mode == "fixture_smoke":
-        return FixtureClient(seed=seed)
     provider = config.get("provider")
+    if execution_mode == "fixture_smoke" and not isinstance(provider, dict):
+        return FixtureClient(seed=seed)
     if not isinstance(provider, dict):
         raise ValueError("真实运行配置缺少 provider")
     provider_type = str(provider.get("type", ""))
-    if provider_type != "openai_responses_compatible":
-        raise ValueError(f"不支持的真实 provider type: {provider_type}")
-    return OpenAIResponsesClient(provider=provider, agents=dict(config.get("agents") or {}))
+    if provider_type == "openai_responses_compatible":
+        if execution_mode == "fixture_smoke":
+            raise ValueError("fixture_smoke 不得使用真实 Responses provider")
+        return OpenAIResponsesClient(provider=provider, agents=dict(config.get("agents") or {}))
+    if provider_type == "openai_chat_completions_compatible":
+        if execution_mode != "fixture_smoke" and bool(config.get("local_preparation_only", False)):
+            raise PermissionError("local_preparation_only 配置禁止真实自托管调用")
+        checkpoint = dict(config.get("checkpoint") or {})
+        if str(checkpoint.get("stage", "")) == "thirty_item":
+            validation_path = Path(str(checkpoint.get("real_checkpoint_validation_path", "")))
+            if not validation_path.is_file():
+                raise PermissionError("30 Item Pilot缺少真实5 Item PASS验证文件")
+            validation = json.loads(validation_path.read_text(encoding="utf-8"))
+            if validation.get("status") != "PASS" or validation.get("unlocks_30_item_pilot") is not True or validation.get("transport_kind") != "urllib":
+                raise PermissionError("30 Item Pilot尚未被真实5 Item checkpoint解锁")
+        if execution_mode != "fixture_smoke":
+            active_agents = [row for row in config.get("agents", {}).values() if not row.get("disabled")]
+            if any(str(row.get("model_revision", "")) in {"", "pending_server_freeze"} for row in active_agents):
+                raise PermissionError("真实自托管调用前必须冻结每个模型revision")
+        from a2a_dygrade_rl.utils.selfhosted_client import SelfHostedChatCompletionsClient
+
+        client = SelfHostedChatCompletionsClient(provider=provider, agents=dict(config.get("agents") or {}))
+        if execution_mode == "fixture_smoke" and client.transport.kind != "fake":
+            raise ValueError("fixture_smoke 的自托管客户端必须使用 fake transport")
+        client.is_fixture = execution_mode == "fixture_smoke"
+        return client
+    raise ValueError(f"不支持的 provider type: {provider_type}")
 
 
 def _extract_output_text(payload: dict[str, Any]) -> str:

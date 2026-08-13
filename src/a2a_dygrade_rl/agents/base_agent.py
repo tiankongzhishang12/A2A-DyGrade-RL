@@ -45,9 +45,14 @@ class BaseAgent(ABC):
         )
         return strip_gold(request)
 
-    def predict(self, item: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, Any]:
+    def predict(
+        self,
+        item: dict[str, Any],
+        context: dict[str, Any] | None = None,
+        logical_call_id: str | None = None,
+    ) -> dict[str, Any]:
         request = self.build_request(item, context)
-        response = self.client.complete(request, self.agent_id)
+        response = self.client.complete(request, self.agent_id, logical_call_id=logical_call_id)
         parsed = self.parse_response(response.payload)
         parsed["token_usage"] = int(response.token_usage)
         parsed["usage"] = response.usage.to_dict()
@@ -64,6 +69,7 @@ class BaseAgent(ABC):
             "confidence": float(raw_response["confidence"]),
             "justification": str(raw_response["justification"]),
             "evidence": dict(raw_response.get("evidence", {})),
+            "trait_scores": dict(raw_response.get("trait_scores", {})),
         }
 
     def validate_prediction(self, prediction: dict[str, Any], item: dict[str, Any]) -> None:
@@ -71,6 +77,18 @@ class BaseAgent(ABC):
             raise ValueError(f"{self.agent_id} pred_score 越界")
         if not 0.0 <= prediction["confidence"] <= 1.0:
             raise ValueError(f"{self.agent_id} confidence 越界")
+        trait_scores = dict(prediction.get("trait_scores") or {})
+        is_dress = str(item.get("scoring_mode", "")) == "analytic_three_dimension"
+        if is_dress:
+            if set(trait_scores) != {"content", "organization", "language"}:
+                raise ValueError(f"{self.agent_id} DREsS 必须返回三个 trait_scores")
+            values = [float(trait_scores[name]) for name in ("content", "organization", "language")]
+            if any(value < 0.0 or value > 5.0 for value in values):
+                raise ValueError(f"{self.agent_id} DREsS trait score 越界")
+            if abs(sum(values) - float(prediction["pred_score"])) > 1e-6:
+                raise ValueError(f"{self.agent_id} DREsS pred_score 必须等于三维和")
+        elif trait_scores:
+            raise ValueError(f"{self.agent_id} 非 DREsS 不得返回 trait_scores")
 
     def estimate_cost(self, token_usage: int) -> float:
         if "cost_per_token" in self.config:
@@ -81,4 +99,3 @@ class BaseAgent(ABC):
     @abstractmethod
     def role_name(self) -> str:
         raise NotImplementedError
-

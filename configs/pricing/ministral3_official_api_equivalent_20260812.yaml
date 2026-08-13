@@ -1,0 +1,32 @@
+manifest_version: "pricing_manifest_v1"
+effective_date: "2026-08-12"
+currency: USD
+pricing_tier: official_api_equivalent
+source: "Mistral AI official model pages reviewed 2026-08-12 and rechecked 2026-08-13"
+source_verified_at: "2026-08-13"
+official_context_tokens: 262144
+cache_pricing_policy: "official cards do not publish a distinct cached/cache-write rate; use the ordinary input rate as a conservative API-equivalent proxy"
+source_urls:
+  - https://docs.mistral.ai/models/ministral-3-3b-25-12
+  - https://docs.mistral.ai/models/ministral-3-8b-25-12
+  - https://docs.mistral.ai/models/ministral-3-14b-25-12
+pricing_semantics: official_api_equivalent_proxy_not_actual_api_bill
+models:
+  mistralai/Ministral-3-3B-Instruct-2512-BF16:
+    pricing_reference_model_id: ministral-3b-2512
+    input_per_million_usd: 0.10
+    cached_input_per_million_usd: 0.10
+    cache_write_per_million_usd: 0.10
+    output_per_million_usd: 0.10
+  mistralai/Ministral-3-8B-Instruct-2512-BF16:
+    pricing_reference_model_id: ministral-8b-2512
+    input_per_million_usd: 0.15
+    cached_input_per_million_usd: 0.15
+    cache_write_per_million_usd: 0.15
+    output_per_million_usd: 0.15
+  mistralai/Ministral-3-14B-Instruct-2512-BF16:
+    pricing_reference_model_id: ministral-14b-2512
+    input_per_million_usd: 0.20
+    cached_input_per_million_usd: 0.20
+    cache_write_per_million_usd: 0.20
+    output_per_million_usd: 0.20

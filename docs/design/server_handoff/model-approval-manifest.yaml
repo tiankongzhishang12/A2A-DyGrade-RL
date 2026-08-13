@@ -1,0 +1,48 @@
+schema_version: selfhosted_model_approval_v1
+code_commit: pending_clean_commit_after_p1_p8_completion
+dirty_worktree_required: false
+status: pending_user_and_server_approval
+family: Ministral 3 Instruct
+reasoning_mode: non_thinking
+precision_preference: bf16
+official_context_tokens: 262144
+approved_runtime_max_model_len: 32768
+common_prompt: prompts/selfhosted_v1/scorer.txt
+common_response_schema: a2a_dygrade_agent_output_v2
+official_sources:
+  - https://docs.mistral.ai/models/ministral-3-3b-25-12
+  - https://docs.mistral.ai/models/ministral-3-8b-25-12
+  - https://docs.mistral.ai/models/ministral-3-14b-25-12
+verified_at: "2026-08-13"
+agents:
+  cheap:
+    agent_id: CheapAgent
+    model_id: mistralai/Ministral-3-3B-Instruct-2512-BF16
+    revision: pending_server_freeze
+    license: Apache-2.0
+    official_api_equivalent_input_usd_per_million_tokens: 0.10
+    official_api_equivalent_output_usd_per_million_tokens: 0.10
+  mid:
+    agent_id: MidAgent
+    model_id: mistralai/Ministral-3-8B-Instruct-2512-BF16
+    revision: pending_server_freeze
+    license: Apache-2.0
+    official_api_equivalent_input_usd_per_million_tokens: 0.15
+    official_api_equivalent_output_usd_per_million_tokens: 0.15
+  strong:
+    agent_id: StrongAgent
+    model_id: mistralai/Ministral-3-14B-Instruct-2512-BF16
+    revision: pending_server_freeze
+    license: Apache-2.0
+    official_api_equivalent_input_usd_per_million_tokens: 0.20
+    official_api_equivalent_output_usd_per_million_tokens: 0.20
+approval_required_before:
+  - dependency_install
+  - model_download
+  - server_rental
+  - real_inference
+local_preparation_counters:
+  dependency_installs: 0
+  model_downloads: 0
+  server_rental_actions: 0
+  online_agent_calls: 0

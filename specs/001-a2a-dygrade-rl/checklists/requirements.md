@@ -2,7 +2,7 @@
 
 **目的**：在进入计划阶段前验证规格完整性与质量
 **创建日期**：2026-07-04
-**最近复核**：2026-08-11
+**最近复核**：2026-08-12
 **功能**：[spec.md](../spec.md)
 
 ## 内容质量
@@ -32,5 +32,5 @@
 
 ## 备注
 
-- V1.5 Dataset Semantic V2 决策写入后重新校验通过；FR-001 至 FR-074、SC-001 至 SC-037 编号连续且无重复，没有遗留澄清、TODO 或占位标记。
-- 用户已批准 Dataset Semantic V2 的 plan、tasks 与实现；当前按先测试、后全量重建、最后 fail-closed 审计的顺序执行。
+- V1.5 Dataset Semantic V2 决策写入后重新校验通过；FR-001 至 FR-088、SC-001 至 SC-046 编号连续且无重复，没有遗留澄清、TODO 或占位标记。
+- 用户已明确授权 P1–P8 全自动继续；V1.6 已冻结本地-only边界、Ministral 3候选、Chat Completions、多模态、Token/成本/attempt、5 Item门禁和服务器交接验收。

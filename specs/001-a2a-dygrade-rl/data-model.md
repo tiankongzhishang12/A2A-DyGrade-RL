@@ -1,5 +1,116 @@
 # 数据模型：A2A-DyGrade-RL 实验流水线
 
+## V1.6 自托管 Ministral 3 Pilot 运行契约
+
+本节覆盖下文历史API Pilot字段。P1–P8只构造和验证这些实体，不产生真实模型预测。
+
+### SelfHostedProviderConfig
+
+- `type`：固定 `openai_chat_completions_compatible`。
+- `base_url`、`api_key_env`：服务器阶段注入；配置不得保存密钥。
+- `usage_source`：正式必须为 `server_reported`。
+- `require_reported_model_match`、`require_usage`：正式均为true。
+- `timeout_seconds`、`max_attempts`、`retry_backoff_seconds`、`concurrency`。
+- `max_total_calls`、`max_cost_usd`：硬门。
+- `pricing_manifest_path`、`prepared_root`。
+
+### ModelCandidate
+
+- `agent_id`：CheapAgent、MidAgent、StrongAgent。
+- `model_id`：精确Ministral 3 Instruct BF16 ID。
+- `model_revision`：本地阶段为 `pending_server_freeze`，真实运行前必须替换为可审计revision。
+- `prompt_path`、`prompt_version`、`prompt_hash`。
+- `generation_parameters`：temperature=0、统一max tokens、non-thinking。
+
+### PreparedAssetRecord
+
+- `asset_id`、`relative_path`、`source_uri`。
+- `source_mime_type`、`source_byte_size`、`source_sha256`。
+- `source_width`、`source_height`。
+- `sent_mime_type`、`sent_byte_size`、`sent_sha256`。
+- `sent_width`、`sent_height`。
+- `transform`：`identity`或`tiff_lzw_to_png_lossless`。
+- `data_url`：仅存在于瞬时请求对象，不写入prepared data或长期审计文件。
+
+校验：路径解析后必须位于prepared root；源size/hash/MIME全部匹配；转换后尺寸不变；正式记录不得包含原始base64正文。
+
+### AgentResponseV2
+
+- `pred_score`：合法总分。
+- `confidence`：0–1。
+- `justification`。
+- `evidence`：五个固定字段。
+- `trait_scores`：DREsS为 `{content, organization, language}`，其他数据集为空对象。
+
+校验：DREsS三个维度均在0–5，`pred_score=sum(trait_scores)`；非DREsS禁止返回非空trait scores。
+
+### SelfHostedTokenUsage
+
+在通用TokenUsage基础上记录：
+
+- `input_tokens`、`output_tokens`、`total_tokens`；
+- `input_text_tokens`、`input_vision_tokens`（服务器提供时）；
+- `cached_input_tokens`、`cache_write_tokens`、`reasoning_tokens`（提供时）。
+
+校验：总Token必须等于输入加输出；`cached_input_tokens`、`cache_write_tokens` 与普通输入共同组成输入计价分区，不得重复计费且缓存两类之和不得超过输入总量；正式图像checkpoint若缺少视觉分解则门禁失败。
+
+### CallAttempt
+
+- `logical_call_id`：稳定cache key。
+- `attempt_id`：`logical_call_id + attempt_number`的hash。
+- `attempt_number`、`latency_seconds`。
+- `status`：success、retryable_failure、terminal_failure。
+- `error`：包含错误类型与消息；HTTP失败由错误文本保留状态码。
+- `requested_model_id`、`reported_model_id`、`pricing_model_id`、`response_id`、`usage`。
+- `official_api_equivalent_cost_usd`、`actual_server_allocated_cost_usd`。
+- `request_body_sha256`、`transport_kind`。
+
+`asset_audit` 与 `gold_key_findings` 位于 canonical record 的客户端 metadata；attempt账本保留每次实际传输的身份、usage、成本、延迟和错误，不持久化base64正文。
+
+每次HTTP尝试一条，不删除失败历史。
+
+### CanonicalAgentRecord
+
+沿用Agent cache record，并新增：
+
+- `logical_call_id`；
+- `canonical_attempt_id`；
+- `official_api_equivalent_cost_usd`；
+- `actual_server_allocated_cost_usd`（可空）；
+- `asset_audit`；
+- `input_text_tokens`、`input_vision_tokens`；
+- `serialized_request_sha256`。
+
+同一个logical call只能有一条active成功canonical记录；retry overhead不得累计到该字段。
+
+### CheckpointManifest
+
+- `run_id`、`selection_seed`、`selection_rule_version`。
+- `source_files`及SHA-256。
+- `paper_id`、5个`item_ids`、数据集计数、图像Item数。
+- `expected_agent_ids`、`expected_canonical_calls=15`。
+- `formal_eligible=false`、`gold_fields_read_for_selection=0`。
+- 输出路径与文件hash。
+
+### CheckpointValidationReport
+
+- `status`：PASS/FAIL。
+- 每项gate的名称、通过状态、detail和证据路径。
+- canonical/attempt数量、失败历史、HTTP请求数、resume新增请求数。
+- `unlocks_30_item_pilot`：仅全部gate通过时为true；本地Fake报告即使PASS也保持false，真实服务器checkpoint才可能解锁。
+
+### ServerHandoffManifest
+
+- `code_commit`、`dirty_worktree_required`；本地未提交阶段必须使用显式pending值，服务器阶段前替换为真实干净commit。
+- 模型、许可证、revision冻结要求。
+- 环境/GPU/磁盘路径和禁止C盘规则。
+- data transfer文件、大小、SHA-256。
+- 费用/时长/调用上限。
+- deployment/checkpoint命令模板。
+- 返回产物路径。
+- `secrets_included=false`、`weights_included=false`、`server_actions_executed=0`。
+
+
 ## Dataset Semantic V2 数据契约
 
 本节覆盖下文仍保留的历史 `Item` 说明。自托管模型只改变后续 Agent cache 阶段，不改变本节的 Gold、评分单位、split、Paper 或 quarantine 定义。

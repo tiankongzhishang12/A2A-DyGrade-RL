@@ -262,6 +262,50 @@ def test_cache_manifest_supports_multiple_splits_and_safe_resume(tmp_path):
         )
 
 
+def test_resume_rebuilds_active_arbitrator_keys_after_dependency_recovers(tmp_path, monkeypatch):
+    items_path = tmp_path / "items_train.jsonl"
+    config_path = tmp_path / "agents.yaml"
+    output_root = tmp_path / "outputs" / "runs"
+    write_jsonl(items_path, make_items()[:1])
+    write_yaml(config_path, agent_config())
+
+    attempts = {"count": 0}
+    original_build_registry = cache_module.build_agent_registry
+
+    def build_registry_with_transient_failure(config, execution_mode, seed):
+        registry = original_build_registry(config, execution_mode, seed)
+        cheap_agent = registry["CheapAgent"]
+        original_predict = cheap_agent.predict
+
+        def flaky_predict(item, context=None):
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise TimeoutError("transient dependency failure")
+            return original_predict(item, context)
+
+        cheap_agent.predict = flaky_predict
+        return registry
+
+    monkeypatch.setattr(cache_module, "build_agent_registry", build_registry_with_transient_failure)
+    common = {
+        "config_path": config_path,
+        "items_path": items_path,
+        "split": "train",
+        "run_id": "fixture_smoke_resume_rebuilds_context_keys",
+        "execution_mode": "fixture_smoke",
+        "output_root": output_root,
+    }
+
+    first = run_agent_cache(**common)
+    assert first["failures"] == 7
+    resumed = run_agent_cache(**common, resume=True)
+    assert resumed["failures"] == 0
+    assert len(resumed["records"]) == 12
+    assert all(record["status"] == "success" for record in resumed["records"])
+    arbitrator_records = [record for record in resumed["records"] if record["agent_id"] == "ArbitratorAgent"]
+    assert len(arbitrator_records) == 8
+    assert len({record["cache_key"] for record in arbitrator_records}) == 8
+
 def test_resume_retries_failed_cache_and_preserves_failure_history(tmp_path, monkeypatch):
     items_path = tmp_path / "items_train.jsonl"
     config_path = tmp_path / "agents.yaml"

@@ -7,6 +7,122 @@
 
 ---
 
+## V1.6 自托管 Ministral 3 Pilot 本地准备（P1–P8）
+
+本修订覆盖下文仍保留的 CLIProxy/OpenAI Responses Pilot 执行路线，但不删除其历史工程证据。用户已授权从 P1 到 P8 全自动完成；本阶段严格限定为本地代码、配置、Prompt、Mock/Fixture 测试、审计与服务器交接准备，不租用服务器、不下载模型、不安装新依赖、不启动真实推理服务。
+
+### 技术上下文
+
+- Python：沿用项目 Python 3.11 与标准库优先原则；本轮不增加运行依赖。
+- 真实服务契约：OpenAI-compatible `POST /v1/chat/completions`，通过可注入 transport 测试，不依赖本地网络服务。
+- 候选模型：Ministral 3 Instruct 同家族 3B/8B/14B BF16；P1–P8 只冻结精确模型ID，不编造权重revision。
+- 输入：Dataset Semantic V2 `items_train.jsonl`、`papers_train_fit.jsonl`、`internal_item_split_manifest.csv` 与稳定 `source_assets`。
+- 输出：所有Dry-run/Mock产物写入 `outputs/runs/<run_id>/` 并标记 `formal_eligible=false`；代码、配置、Prompt、测试和交接文档进入宪法规定目录。
+- 约束：prepared data只读；Test不参与；Checkpoint仅Cheap/Mid/Strong；15条canonical调用；无Evidence/Arbitrator；无真实付费调用。
+
+### 宪法检查
+
+| 原则 | 设计响应 |
+|---|---|
+| 简体中文优先 | spec/plan/tasks、runbook、审计与测试说明使用简体中文 |
+| 论文实验成果优先 | 只建设离线Agent cache执行与可审计成本链路，不建设Web平台 |
+| 可复现优先 | 模型/Prompt/Schema/数据/价格/选择规则均以hash和manifest冻结 |
+| 数据完整性 | 只读取Semantic V2 train_fit；序列化HTTP body递归Gold隔离；prepared data只读 |
+| 公平评价 | 三档模型共享Prompt、Schema、生成参数、图片策略和同一5题样本 |
+| 先Smoke后全量 | transport/fixture → 5 Item Fake workflow → 服务器Smoke → 真实5 Item → 30 Item |
+| 依赖审批 | 不安装Pillow/vLLM/PyTorch等依赖；TIFF适配使用标准库确定性解码/PNG编码 |
+| 运行产物 | 每次本地Dry-run使用唯一run_id，全部进入outputs/runs/<run_id> |
+
+结论：P1–P8不触发真实模型、外部依赖或服务器审批红线，宪法门禁通过。
+
+### P1：自托管配置契约
+
+新增 Ministral 3 checkpoint/30 Item 候选配置和官方API等价价格快照。配置将执行端点、身份校验、usage要求、硬预算、图片策略、模型ID、Prompt/Schema版本显式化。30 Item配置只是服务器阶段候选模板，checkpoint PASS前本地/服务器执行入口必须拒绝使用。
+
+### P2：Chat Completions客户端
+
+新增独立 `SelfHostedChatCompletionsClient`，不改写旧 `OpenAIResponsesClient`。客户端以transport接口发送HTTP请求，真实默认transport使用标准库；测试transport返回确定性响应并保存实际序列化body。解析层校验reported model、JSON、Token usage、响应ID、finish reason和成本。
+
+### P3：多模态资产处理
+
+新增 `multimodal.py`：
+
+1. prepared root边界校验；
+2. size/hash/MIME核验；
+3. JPEG原字节透传；
+4. TIFF LZW RGB解码与确定性PNG编码；
+5. source/sent metadata与hash；
+6. data URL构造。
+
+所有转换只发生在内存或run产物，不写回`data/processed/semantic_v2`。正式视觉Token来自服务器usage details；本地只记录资产像素和发送字节，不估算视觉Token。
+
+### P4：统一Prompt与Schema
+
+Cheap/Mid/Strong共用单一 `prompts/selfhosted_v1/scorer.txt`。Schema按数据集强制：通用字段固定；DREsS返回三维trait scores且总分求和；其他数据集trait scores为空。Agent角色差异只来自模型ID；请求构建会移除role/agent_id等能力暗示，并冻结除`model`外的请求语义hash。
+
+### P5：成本、attempt与canonical账本
+
+扩展Token usage以接收Chat Completions字段及可选文本/视觉分解；官方API等价成本用冻结价格manifest计算。每次传输attempt进入attempt audit；每个cache key即稳定logical call，active cache只保留最终canonical成功。attempt账本是跨进程预算恢复的权威来源，失败attempt也恢复调用数与已发生成本。汇总报告分列：
+
+- canonical official API-equivalent cost；
+- operational retry token overhead与server overhead；
+- 可选canonical actual server allocated cost；
+- Token与延迟。
+
+### P6：5 Item checkpoint
+
+新增确定性checkpoint builder，从train_fit strict Paper中筛选一份同时覆盖三个数据集且至少有一个图像Item的5题Paper。排序只读取paper_id、Item dataset、source_assets和固定种子，不读取Gold。输出冻结Item/Paper/internal manifest、选择审计和预期15调用清单。
+
+新增checkpoint validator，检查：15条Cheap/Mid/Strong canonical成功、run/transport身份、精确模型身份、Prompt/Schema快照、除model外请求语义公平性、Schema/范围、DREsS三维、SAS whole-response、图片asset audit、Gold隔离、Token/成本复算、attempt唯一性、resume和无Evidence/Arbitrator。只有PASS manifest可解锁未来30 Item模板。
+
+### P7：本地Mock/Fixture与回归验证
+
+使用内存Fake transport覆盖正常、多模态、模型替换、usage错误、非法JSON、可重试HTTP失败、不可重试失败、预算硬门和resume。运行：
+
+1. 新增单元测试；
+2. 5 Item Fake集成workflow；
+3. 冻结 Semantic Readiness manifest 只读状态/hash复核；
+4. 全仓pytest；
+5. 仓库结构检查。
+
+Mock结果100%标记非Formal，不进入能力画像或Router。
+
+### P8：服务器交接材料
+
+在 `docs/design/server_handoff/` 生成：
+
+- README与执行边界；
+- model approval manifest；
+- environment lock/template；
+- data transfer manifest及hash；
+- pricing/费用上限说明；
+- deployment command template（仅模板，不执行）；
+- 5 Item runbook；
+- artifact return manifest。
+
+交接包不包含API key、服务器凭据、权重、虚拟环境或真实下载产物；数据传输仅保留冻结5题所需最小集合，显式排除Dev/Test和非checkpoint训练数据。服务器阶段必须使用干净Git commit和D盘/服务器数据盘路径。
+
+### 测试与门禁顺序
+
+```text
+schema/配置测试
+→ 多模态资产单测
+→ Chat客户端/usage/成本/重试单测
+→ checkpoint选择单测
+→ Fake 5 Item集成
+→ resume集成
+→ Semantic Readiness复核
+→ 全仓测试
+→ spec/plan/tasks analyze
+→ verify-tasks
+→ verify
+→ code/tests/errors review
+```
+
+任何阻塞性失败必须修复并重跑；P1–P8结束时真实调用、下载、安装和服务器操作计数必须仍为0。
+
+---
+
 ## V1.5 Dataset Semantic V2 实施修订
 
 本修订覆盖下文仍保留的 V1.4 历史数据规模、旧 CLIProxy Pilot 和“External Prepared Data 已完成”等表述；冲突时以本节、V1.5 spec 和仓库根目录 AGENTS.md 为准。用户已明确要求先完成数据整改，并确认后续真实 Agent 改为租用服务器自托管；本轮不得下载模型、安装新依赖或调用真实推理服务。
@@ -1105,4 +1221,3 @@ CLI 只做流程编排，业务逻辑留在 `src/`。具体任务见 `tasks.md`�
 6. 向用户提交基于重建 train_fit Paper 的真实 Agent Pilot 模型、费用、support catalog 和依赖审批方案。
 
 完整 Fixture Smoke 已实现、审核并通过；下一步只准备 T052A 的真实 Agent Pilot 候选配置和审批材料，不联网、不下载依赖、不调用真实模型，直到用户单独批准。
-

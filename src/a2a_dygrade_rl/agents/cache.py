@@ -1,4 +1,4 @@
-﻿"""Auditable Agent cache generation, validation, and resume support."""
+"""Auditable Agent cache generation, validation, and resume support."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import copy
 import csv
 import hashlib
 import json
+import inspect
 import os
 import random
 import re
@@ -30,6 +31,7 @@ RUN_PREFIXES = {
 }
 CACHE_SPLITS = {"train", "train_fit", "train_calibration", "dev", "test"}
 BASE_AGENT_IDS = ("CheapAgent", "MidAgent", "StrongAgent", "EvidenceAgent")
+SCORING_AGENT_IDS = ("CheapAgent", "MidAgent", "StrongAgent")
 DEFAULT_ARBITRATOR_CONTEXTS = (
     ("CheapAgent", "MidAgent"),
     ("CheapAgent", "StrongAgent"),
@@ -348,11 +350,12 @@ def _record_from_prediction(
         "agent_id": agent.agent_id,
         "run_id": run_id,
         "execution_mode": execution_mode,
-        "is_fixture": execution_mode == "fixture_smoke",
+        "is_fixture": bool(getattr(agent.client, "is_fixture", False)),
         "pred_score": prediction["pred_score"],
         "confidence": prediction["confidence"],
         "justification": prediction["justification"],
         "evidence": prediction.get("evidence", {}),
+        "trait_scores": prediction.get("trait_scores", {}),
         "cost": prediction["cost"],
         "latency": prediction["latency"],
         "token_usage": prediction["token_usage"],
@@ -361,6 +364,8 @@ def _record_from_prediction(
         "cache_write_tokens": int(usage.get("cache_write_tokens", 0)),
         "output_tokens": int(usage.get("output_tokens", 0)),
         "reasoning_tokens": int(usage.get("reasoning_tokens", 0)),
+        "input_text_tokens": int(usage.get("input_text_tokens", 0)),
+        "input_vision_tokens": int(usage.get("input_vision_tokens", 0)),
         "gold_score": float(item["gold_score"]),
         "split": split,
         "model_id": agent.model_id,
@@ -369,6 +374,7 @@ def _record_from_prediction(
         "input_hash": stable_hash(request),
         "context_hash": stable_hash(strip_gold(context)),
         "cache_key": cache_key,
+        "logical_call_id": cache_key,
         "cache_schema_version": schema_version,
         "status": "success",
         "error": None,
@@ -382,6 +388,12 @@ def _record_from_prediction(
             "generation_parameters": dict(agent.config.get("generation_parameters", {})),
             "context_agents": context_agents,
             "client": prediction.get("client_metadata", {}),
+            "canonical_attempt_id": prediction.get("client_metadata", {}).get("canonical_attempt_id"),
+            "serialized_request_sha256": prediction.get("client_metadata", {}).get("request_body_sha256"),
+            "request_semantics_sha256": prediction.get("client_metadata", {}).get("request_semantics_sha256"),
+            "asset_audit": prediction.get("client_metadata", {}).get("asset_audit", []),
+            "official_api_equivalent_cost_usd": prediction.get("client_metadata", {}).get("pricing", {}).get("official_api_equivalent_cost_usd", prediction["cost"]),
+            "actual_server_allocated_cost_usd": prediction.get("client_metadata", {}).get("pricing", {}).get("actual_server_allocated_cost_usd"),
         },
     }
     return record
@@ -405,6 +417,7 @@ def run_agent_cache(
     checkpoint_item_limit: int | None = None,
     concurrency: int | None = None,
     max_total_calls_override: int | None = None,
+    manifest_agent_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     is_fixture = execution_mode == "fixture_smoke"
     validate_run_identity(run_id, execution_mode, is_fixture)
@@ -426,9 +439,16 @@ def run_agent_cache(
     schema_version = str(config.get("cache_schema_version", CACHE_SCHEMA_VERSION))
     registry = build_agent_registry(runtime_config, execution_mode=execution_mode, seed=seed)
     selected_agent_ids = list(agents or registry.keys())
-    unknown = set(selected_agent_ids) - set(registry)
+    approved_agent_ids = list(manifest_agent_ids or selected_agent_ids)
+    if not selected_agent_ids or len(selected_agent_ids) != len(set(selected_agent_ids)):
+        raise ValueError("selected agent列表必须非空且不重复")
+    if not approved_agent_ids or len(approved_agent_ids) != len(set(approved_agent_ids)):
+        raise ValueError("manifest agent列表必须非空且不重复")
+    unknown = (set(selected_agent_ids) | set(approved_agent_ids)) - set(registry)
     if unknown:
         raise ValueError(f"请求了未注册 Agent: {sorted(unknown)}")
+    if not set(selected_agent_ids).issubset(approved_agent_ids):
+        raise ValueError("执行Agent必须是manifest Agent集合的子集")
     if "ArbitratorAgent" in selected_agent_ids and not set(BASE_AGENT_IDS).issubset(selected_agent_ids):
         raise ValueError("生成 ArbitratorAgent cache 时必须同时生成四类基础上下文 Agent")
 
@@ -465,7 +485,7 @@ def run_agent_cache(
     pricing_manifest_hash = file_sha256(pricing_manifest_path) if pricing_manifest_path else None
     context_catalog = build_context_support_catalog(
         config,
-        selected_agent_ids=selected_agent_ids,
+        selected_agent_ids=approved_agent_ids,
         execution_mode=execution_mode,
         scope_source="cache_run_config",
         scope_fingerprint=config_fingerprint,
@@ -489,7 +509,7 @@ def run_agent_cache(
         "data_fingerprint": data_fingerprint,
         "item_count": len(items),
         "item_ids": item_ids,
-        "selected_agent_ids": sorted(selected_agent_ids),
+        "selected_agent_ids": sorted(approved_agent_ids),
         "scope_source": scope.scope_source,
         "scope_fingerprint": scope.scope_fingerprint,
         "formal_eligible": scope.formal_eligible,
@@ -535,6 +555,8 @@ def run_agent_cache(
     if max_total_calls_override is not None:
         manifest["operational_max_total_calls_override"] = int(max_total_calls_override)
         manifest["experimental_effective_call_target"] = len(execution_items) * (len(BASE_AGENT_IDS) + len(context_catalog["arbitrator_contexts"]))
+    manifest["latest_execution_agent_ids"] = sorted(selected_agent_ids)
+    manifest["approved_manifest_agent_ids"] = sorted(approved_agent_ids)
     _atomic_write_json(manifest_path, manifest)
     _atomic_write_json(run_dir / "configs" / "context_support_catalog.json", context_catalog)
     ensure_dir(split_dir)
@@ -546,13 +568,22 @@ def run_agent_cache(
             overwrite=True,
         )
     _atomic_write_json(run_dir / "configs" / f"data_fingerprint.{split}.json", {"fingerprint": data_fingerprint, "item_count": len(items), "item_ids": item_ids, "split": split})
-    _atomic_write_json(
-        run_dir / "configs" / "prompts_manifest.json",
-        {agent_id: {"prompt_hash": agent.prompt_hash, "prompt_version": agent.prompt_version} for agent_id, agent in registry.items()},
-    )
+    prompt_snapshot_dir = ensure_dir(run_dir / "configs" / "prompts")
+    prompt_manifest: dict[str, dict[str, Any]] = {}
+    for agent_id, agent in registry.items():
+        snapshot_path = prompt_snapshot_dir / f"{agent_id}.txt"
+        snapshot_path.write_text(agent.prompt_text, encoding="utf-8", newline="\n")
+        prompt_manifest[agent_id] = {
+            "prompt_hash": agent.prompt_hash,
+            "prompt_version": agent.prompt_version,
+            "snapshot_path": str(snapshot_path.relative_to(run_dir)),
+            "snapshot_sha256": file_sha256(snapshot_path),
+        }
+    _atomic_write_json(run_dir / "configs" / "prompts_manifest.json", prompt_manifest)
 
     journal_path = run_dir / "logs" / f"cache_journal.{split}.jsonl"
-    existing = _load_existing(split_dir, selected_agent_ids)
+    reporting_agent_ids = approved_agent_ids
+    existing = _load_existing(split_dir, reporting_agent_ids)
     journal_recovered_records = _merge_recovery_journal(existing, journal_path)
     shared_client = next(iter(registry.values())).client
     existing_success = [
@@ -574,7 +605,13 @@ def run_agent_cache(
     reused = 0
     state_lock = threading.Lock()
     invalid_reuse_events: list[dict[str, Any]] = []
-    active_keys: dict[str, set[str]] = {agent_id: set() for agent_id in selected_agent_ids}
+    active_keys: dict[str, set[str]] = {
+        # 本轮会重新计算被选 Agent 的完整逻辑调用图；只保留本轮实际命中的 key，
+        # 避免依赖失败恢复后把旧 context_hash 对应的失败记录继续当作 active cache。
+        # 未在本阶段执行的 Agent 则必须保留，供单卡服务器按模型分阶段合并同一 run。
+        agent_id: (set() if agent_id in selected_agent_ids else set(existing[agent_id]))
+        for agent_id in reporting_agent_ids
+    }
 
     def execute(item: dict[str, Any], agent_id: str, context: dict[str, Any]) -> dict[str, Any]:
         nonlocal generated, reused
@@ -637,7 +674,11 @@ def run_agent_cache(
                 return cached
         try:
             request = agent.build_request(item, context)
-            prediction = agent.predict(item, context)
+            predict_parameters = inspect.signature(agent.predict).parameters
+            if "logical_call_id" in predict_parameters:
+                prediction = agent.predict(item, context, logical_call_id=key)
+            else:  # 兼容测试或历史扩展中只接受 item/context 的包装器。
+                prediction = agent.predict(item, context)
             record = _record_from_prediction(
                 item=item,
                 agent=agent,
@@ -654,16 +695,16 @@ def run_agent_cache(
         except Exception as exc:
             record = {
                 "item_id": item["item_id"], "agent_id": agent_id, "run_id": run_id,
-                "execution_mode": execution_mode, "is_fixture": is_fixture, "pred_score": None,
-                "confidence": 0.0, "justification": "", "evidence": {}, "cost": 0.0,
+                "execution_mode": execution_mode, "is_fixture": bool(getattr(agent.client, "is_fixture", False)), "pred_score": None,
+                "confidence": 0.0, "justification": "", "evidence": {}, "trait_scores": {}, "cost": 0.0,
                 "latency": 0.0, "token_usage": 0, "input_tokens": 0,
                 "cached_input_tokens": 0, "cache_write_tokens": 0, "output_tokens": 0,
-                "reasoning_tokens": 0, "gold_score": float(item["gold_score"]),
+                "reasoning_tokens": 0, "input_text_tokens": 0, "input_vision_tokens": 0, "gold_score": float(item["gold_score"]),
                 "split": split, "model_id": agent.model_id, "prompt_version": agent.prompt_version,
                 "prompt_hash": agent.prompt_hash, "input_hash": stable_hash(request),
-                "context_hash": context_hash, "cache_key": key, "cache_schema_version": schema_version,
+                "context_hash": context_hash, "cache_key": key, "logical_call_id": key, "cache_schema_version": schema_version,
                 "status": "failed", "error": f"{type(exc).__name__}: {exc}",
-                "metadata": {"score_min": float(item["score_min"]), "score_max": float(item["score_max"])},
+                "metadata": {"score_min": float(item["score_min"]), "score_max": float(item["score_max"]), "client": {}},
             }
             validate_agent_output(record, item=item, allowed_agents=set(registry))
         with state_lock:
@@ -701,7 +742,7 @@ def run_agent_cache(
             list(executor.map(process_item, execution_items))
 
     all_records: list[dict[str, Any]] = []
-    for agent_id in selected_agent_ids:
+    for agent_id in reporting_agent_ids:
         agent_records = sorted(
             (existing[agent_id][key] for key in active_keys[agent_id]),
             key=lambda record: record["cache_key"],
@@ -736,9 +777,27 @@ def run_agent_cache(
         rejection_history = [rejection_snapshots[key] for key in sorted(rejection_snapshots)]
         write_jsonl(rejection_log_path, rejection_history, overwrite=True)
 
+    attempt_log_path = Path(str(config.get("provider", {}).get("attempt_log_path", "")))
+    attempt_rows = read_jsonl(attempt_log_path) if str(attempt_log_path) not in {"", "."} and attempt_log_path.exists() else []
+    retry_overhead_by_agent = {
+        agent_id: sum(
+            float(row.get("official_api_equivalent_cost_usd", 0.0))
+            for row in attempt_rows
+            if row.get("agent_id") == agent_id and row.get("status") != "success"
+        )
+        for agent_id in reporting_agent_ids
+    }
+    retry_server_overhead_by_agent = {
+        agent_id: sum(
+            float(row.get("actual_server_allocated_cost_usd") or 0.0)
+            for row in attempt_rows
+            if row.get("agent_id") == agent_id and row.get("status") != "success"
+        )
+        for agent_id in reporting_agent_ids
+    }
     coverage_rows = []
     cost_rows = []
-    for agent_id in selected_agent_ids:
+    for agent_id in reporting_agent_ids:
         rows = [record for record in all_records if record["agent_id"] == agent_id]
         success = [record for record in rows if record["status"] == "success"]
         coverage_rows.append({"agent_id": agent_id, "records": len(rows), "success": len(success), "failure": len(rows) - len(success), "coverage": len(success) / max(1, len(rows))})
@@ -748,16 +807,24 @@ def run_agent_cache(
             "mean_latency": sum(float(row["latency"]) for row in success) / max(1, len(success)),
             "total_tokens": sum(int(row["token_usage"]) for row in success),
             "input_tokens": sum(int(row.get("input_tokens", 0)) for row in success),
+            "input_text_tokens": sum(int(row.get("input_text_tokens", 0)) for row in success),
+            "input_vision_tokens": sum(int(row.get("input_vision_tokens", 0)) for row in success),
             "cached_input_tokens": sum(int(row.get("cached_input_tokens", 0)) for row in success),
             "cache_write_tokens": sum(int(row.get("cache_write_tokens", 0)) for row in success),
             "output_tokens": sum(int(row.get("output_tokens", 0)) for row in success),
             "reasoning_tokens": sum(int(row.get("reasoning_tokens", 0)) for row in success),
+            "canonical_actual_server_allocated_cost_usd": sum(
+                float(row.get("metadata", {}).get("actual_server_allocated_cost_usd") or 0.0)
+                for row in success
+            ),
+            "operational_retry_overhead_usd": retry_overhead_by_agent.get(agent_id, 0.0),
+            "operational_retry_server_overhead_usd": retry_server_overhead_by_agent.get(agent_id, 0.0),
         })
     _write_csv(run_dir / "reports" / f"agent_cache_coverage.{split}.csv", coverage_rows, ["agent_id", "records", "success", "failure", "coverage"])
     _write_csv(
         run_dir / "reports" / f"agent_cache_cost_summary.{split}.csv",
         cost_rows,
-        ["agent_id", "total_cost", "mean_latency", "total_tokens", "input_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens"],
+        ["agent_id", "total_cost", "mean_latency", "total_tokens", "input_tokens", "input_text_tokens", "input_vision_tokens", "cached_input_tokens", "cache_write_tokens", "output_tokens", "reasoning_tokens", "canonical_actual_server_allocated_cost_usd", "operational_retry_overhead_usd", "operational_retry_server_overhead_usd"],
     )
     audit = (
         "# Agent Cache Audit\n\n"
@@ -767,7 +834,7 @@ def run_agent_cache(
         f"- failure_history_count: {len(failure_history)}\n"
         f"- invalid_cache_reuse_rejections: {len(invalid_reuse_events)}\n"
         f"- invalid_cache_reuse_history_count: {len(rejection_history)}\n"
-        "- gold_in_request: 0（由 BaseAgent/FixtureClient 双重校验）\n"
+        "- gold_in_request: 0（由 BaseAgent 与客户端序列化审计双重校验）\n"
     )
     audit_path = run_dir / "reports" / f"agent_cache_audit.{split}.md"
     ensure_dir(audit_path.parent)
@@ -775,6 +842,8 @@ def run_agent_cache(
     budget_snapshot = shared_client.budget_snapshot()
     manifest["online_agent_calls"] = int(budget_snapshot.get("calls", 0)) if not is_fixture else 0
     manifest["api_cost_usd"] = float(budget_snapshot.get("cost_usd", 0.0)) if not is_fixture else 0.0
+    manifest["operational_retry_overhead_usd"] = sum(retry_overhead_by_agent.values())
+    manifest["operational_retry_server_overhead_usd"] = sum(retry_server_overhead_by_agent.values())
     manifest["completed_item_count"] = len(execution_items)
     _atomic_write_json(manifest_path, manifest)
     return {
@@ -804,5 +873,3 @@ def read_cache_records(cache_dir: str | Path, split: str) -> list[dict[str, Any]
     for path in sorted(split_dir.glob("*.jsonl")):
         records.extend(read_jsonl(path))
     return sorted(records, key=lambda record: record["cache_key"])
-
-

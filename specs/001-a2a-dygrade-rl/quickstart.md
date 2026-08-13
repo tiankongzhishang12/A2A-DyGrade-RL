@@ -1,5 +1,110 @@
 # 快速开始：A2A-DyGrade-RL 实验流水线
 
+## V1.6 自托管 Ministral 3 Pilot 本地准备（P1–P8）
+
+本阶段禁止真实模型调用、模型下载、依赖安装和服务器操作。全部命令在仓库根目录执行，运行产物使用唯一 `run_id`。
+
+### 1. 验证配置、Prompt 与多模态资产
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q `
+  tests/unit/test_selfhosted_client.py `
+  tests/unit/test_multimodal_assets.py `
+  tests/unit/test_selfhosted_costing.py `
+  tests/unit/test_selfhosted_checkpoint.py
+```
+
+预期：所有测试通过；4个 ASAP-SAS source asset 的 hash/MIME/尺寸通过，2个 TIFF 可确定性无损转为 PNG。
+
+### 2. 构建固定5题 checkpoint
+
+```powershell
+$runId = "real_pilot_selfhosted_checkpoint_prepare_20260812_002"
+.\.venv\Scripts\python.exe scripts/08_prepare_selfhosted_checkpoint.py `
+  --papers-path data/processed/semantic_v2/papers_train_fit.jsonl `
+  --items-path data/processed/semantic_v2/items_train.jsonl `
+  --internal-item-manifest data/processed/semantic_v2/internal_item_split_manifest.csv `
+  --semantic-readiness-manifest data/processed/semantic_v2/semantic_readiness_manifest.json `
+  --run-id $runId
+```
+
+预期：生成1份strict Paper、5个唯一train_fit Item、覆盖三个数据集、至少一个图片Item，`gold_fields_read_for_selection=0`。
+
+### 3. 运行Fake Chat Completions端到端workflow
+
+```powershell
+$runId = "fixture_smoke_selfhosted_ministral3_20260812_007"
+.\.venv\Scripts\python.exe scripts/09_run_selfhosted_agent_cache.py `
+  --config configs/experiments/selfhosted_ministral3_checkpoint.yaml `
+  --items-path outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/items_train_fit_checkpoint.jsonl `
+  --internal-item-manifest outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/internal_item_split_manifest.checkpoint.csv `
+  --run-id $runId `
+  --transport fake `
+  --fixture
+```
+
+预期：15条 Cheap/Mid/Strong canonical 成功记录，0条 Evidence/Arbitrator，所有序列化body无Gold。
+
+### 4. 验证checkpoint与resume
+
+```powershell
+.\.venv\Scripts\python.exe scripts/10_validate_selfhosted_checkpoint.py `
+  --run-dir outputs/runs/fixture_smoke_selfhosted_ministral3_20260812_007 `
+  --items-path outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/items_train_fit_checkpoint.jsonl `
+  --transport-kind fake
+
+.\.venv\Scripts\python.exe scripts/09_run_selfhosted_agent_cache.py `
+  --config configs/experiments/selfhosted_ministral3_checkpoint.yaml `
+  --items-path outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/items_train_fit_checkpoint.jsonl `
+  --internal-item-manifest outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/internal_item_split_manifest.checkpoint.csv `
+  --run-id fixture_smoke_selfhosted_ministral3_20260812_007 `
+  --transport fake `
+  --fixture `
+  --resume
+```
+
+预期：resume新增HTTP请求数为0，canonical成本不重复累计。Fake PASS只证明本地契约成立，`unlocks_30_item_pilot=false`。
+
+### 5. 全量验证
+
+```powershell
+# 本阶段只读确认已冻结 Semantic Readiness，不重写 prepared manifest。
+.\.venv\Scripts\python.exe -c "import json,pathlib; p=pathlib.Path('data/processed/semantic_v2/semantic_readiness_manifest.json'); assert json.loads(p.read_text(encoding='utf-8'))['status']=='PASS'"
+
+.\.venv\Scripts\python.exe -m pytest -q
+
+.\.venv\Scripts\python.exe scripts/11_audit_selfhosted_local_readiness.py `
+  --run-id selfhosted_local_readiness_20260812_001 `
+  --fake-run-id fixture_smoke_selfhosted_ministral3_20260812_007
+```
+
+服务器阶段需另行批准；不得在本Quickstart中执行模型下载或部署模板。
+
+### 单卡服务器按模型分阶段执行
+
+服务器只常驻一个模型时，三个阶段必须复用同一 `run_id`，并用 `--agents` 每次只执行当前已启动模型对应的 Agent：
+
+```bash
+# 3B服务已启动
+python scripts/09_run_selfhosted_agent_cache.py ... \
+  --run-id real_pilot_selfhosted_ministral3_<UNIQUE_ID> \
+  --transport urllib --server-approved --agents CheapAgent
+
+# 停止3B、启动8B后，只补MidAgent；同一run使用--resume
+python scripts/09_run_selfhosted_agent_cache.py ... \
+  --run-id real_pilot_selfhosted_ministral3_<UNIQUE_ID> \
+  --transport urllib --server-approved --agents MidAgent --resume
+
+# 停止8B、启动14B后，只补StrongAgent
+python scripts/09_run_selfhosted_agent_cache.py ... \
+  --run-id real_pilot_selfhosted_ministral3_<UNIQUE_ID> \
+  --transport urllib --server-approved --agents StrongAgent --resume
+```
+
+三个阶段完成后再运行 validator；不得在只启动一个模型时省略 `--agents`，否则客户端会尝试调用尚未部署的另外两个模型。
+
+
+---
 ## Dataset Semantic V2 正式数据整改
 
 旧 `data/processed/` 根目录产物视为 legacy。自托管模型实验必须先构建并冻结 `data/processed/semantic_v2/`；本阶段不会下载权重、安装新依赖或调用模型。

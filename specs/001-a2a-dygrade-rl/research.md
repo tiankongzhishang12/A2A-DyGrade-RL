@@ -1,3 +1,49 @@
+# V1.6 自托管 Ministral 3 Pilot 本地准备研究决策
+
+## 决策1：首轮候选模型族
+
+- **Decision**：Cheap/Mid/Strong分别使用Ministral 3 Instruct 3B/8B/14B BF16，同一Prompt、Schema与解码参数。
+- **Rationale**：三档同家族且均支持图文输入，部署规模相对可控，适合先验证动态路由的成本—能力分层；不混入Qwen或MoE以减少Tokenizer、Processor和训练来源混杂。
+- **Alternatives considered**：Qwen3.5 2B/4B/27B作为能力跨度更大的备用族；不在同一正式三档中混用两家模型。
+
+## 决策2：本地与服务器边界
+
+- **Decision**：P1–P8仅做本地实现、Mock/Fixture、审计与交接材料；模型权重、推理依赖和GPU运行推迟到单独审批的服务器阶段。
+- **Rationale**：避免按小时服务器被开发调试消耗，遵守依赖/下载审批和先Smoke后真实调用规则。
+- **Alternatives considered**：直接租服务器现场开发，因成本、环境漂移和复现风险被拒绝。
+
+## 决策3：服务协议
+
+- **Decision**：新增OpenAI-compatible Chat Completions客户端，并保留旧Responses客户端用于历史CLIProxy证据。
+- **Rationale**：vLLM/SGLang更稳定地暴露`/v1/chat/completions`；独立客户端避免破坏旧Pilot行为。
+- **Alternatives considered**：复用Responses客户端或绑定某个推理引擎私有SDK，前者协议不符，后者增加依赖和平台耦合。
+
+## 决策4：TIFF处理
+
+- **Decision**：使用标准库实现当前ASAP-SAS两张LZW RGB TIFF的确定性无损解码与PNG编码；不安装Pillow。
+- **Rationale**：原资产仅4张且TIFF编码特征已审计，标准库实现可满足本轮固定数据契约并保持依赖安装数为0。
+- **Alternatives considered**：安装Pillow、服务器端直接发送TIFF或裁剪/转JPEG；分别因审批、兼容性和有损/语义风险被拒绝。
+
+## 决策5：Token与价格语义
+
+- **Decision**：主成本为官方API等价Token成本，实际服务器分摊成本为并列辅助指标；二者都不称为Actual API Bill。
+- **Rationale**：统一Router预算单位，同时诚实反映自托管实际支付的是服务器租金。正式Token只接受服务端usage；图片分解缺失会阻塞真实checkpoint。
+- **Alternatives considered**：字符数估算、Tokenizer离线估算或只用服务器时长，均不能同时满足多模态精确Token和跨模型可比性。
+
+## 决策6：重试记账
+
+- **Decision**：稳定logical call对应唯一canonical成功成本；所有HTTP尝试进入独立attempt账本，失败费用进入operational overhead。
+- **Rationale**：避免网络波动和resume导致同一Item成本被重复计入论文实验主账本，同时保留真实运维开销。
+- **Alternatives considered**：把全部attempt求和为Item成本或删除失败记录，分别会污染公平比较或破坏审计。
+
+## 决策7：5 Item选择
+
+- **Decision**：从train_fit strict Paper确定性选择一份覆盖三数据集且至少有一个图片Item的Paper，选择逻辑不得读取Gold。
+- **Rationale**：同时验证Paper级5题、三类评分语义和多模态链路；固定Paper比从不同Paper拼5题更贴近后续episode契约。
+- **Alternatives considered**：任意平衡抽5题或按Gold挑难题，前者破坏Paper语义，后者产生统计泄漏。
+
+---
+
 # 研究决策：A2A-DyGrade-RL 实验流水线
 
 ## 决策：使用离线文件型研究流水线

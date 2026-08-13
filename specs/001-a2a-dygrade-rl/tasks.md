@@ -342,3 +342,56 @@ T043/T043A/T043B/T044/T045/T045B/T045C（测试与契约先行）
 - `docs/design/研究定义与实验约束同步方案.md` V1.4 是本轮同步依据；后续若改变内部拆分顺序、四阶段职责、质量指标、Bootstrap 或 Dev 顺序，必须先回到规格/计划阶段。
 - 更新 `tasks.md` 后停留在用户审阅门禁，不自动进入 `speckit-implement`。
 
+
+---
+
+## Phase 9：V1.6 自托管 Ministral 3 Pilot 本地准备 P1–P8（优先级：P1，当前执行）
+
+**目标**：在不租服务器、不下载模型、不安装新依赖、不调用真实推理服务的前提下，完成自托管 Chat Completions 执行层、多模态资产、统一 Prompt/Schema、Token/成本/attempt 账本、固定5题 checkpoint、Fake workflow 和服务器交接材料。
+
+**独立验收**：本地 Fake workflow 对固定5题和 Cheap/Mid/Strong 生成15条 canonical 成功记录；实际序列化请求 Gold 泄漏为0；TIFF 无损转换、DREsS 三维求和、Token/价格、失败重试与 resume 均通过；全仓测试与实现后审核无未解决 CRITICAL/HIGH。
+
+### P1：规格、配置与测试契约
+
+- [X] T092 [US2] 更新 `specs/001-a2a-dygrade-rl/spec.md`、`plan.md`、`research.md`、`data-model.md`、`quickstart.md`、`contracts/selfhosted-chat-completions.md` 和 `checklists/requirements.md`，冻结 P1–P8 本地边界、Ministral 3 候选、Token/成本语义与5 Item门禁
+- [X] T093 [P] [US2] 新增 `tests/unit/test_selfhosted_client.py`，覆盖 Chat Completions body/JSON/model/usage、可重试与终止错误、Gold隔离和attempt audit
+- [X] T094 [P] [US2] 新增 `tests/unit/test_multimodal_assets.py`，覆盖prepared root边界、4个正式资产、JPEG identity、TIFF LZW到PNG、hash/MIME/尺寸和prepared只读
+- [X] T095 [P] [US2] 新增 `tests/unit/test_selfhosted_costing.py`，覆盖Chat usage别名、文本/视觉Token分解、官方API等价成本、服务器分摊成本、canonical与retry overhead隔离
+- [X] T096 [P] [US2] 新增 `tests/unit/test_selfhosted_checkpoint.py` 与 `tests/integration/test_selfhosted_checkpoint_workflow.py`，覆盖无Gold确定性选卷、15调用、DREsS三维、图片、resume和Fake门禁
+
+### P2–P5：执行层实现
+
+- [X] T097 [US2] 在 `configs/experiments/selfhosted_ministral3_checkpoint.yaml`、`selfhosted_ministral3_pilot30.yaml` 和 `configs/pricing/ministral3_official_api_equivalent_20260812.yaml` 实现自托管配置、三档模型、硬预算和价格快照
+- [X] T098 [US2] 在 `prompts/selfhosted_v1/scorer.txt` 冻结 Cheap/Mid/Strong 共用无Anchor评分 Prompt，并在 `src/a2a_dygrade_rl/utils/llm_client.py` 定义含DREsS traits的统一响应Schema
+- [X] T099 [US2] 在 `src/a2a_dygrade_rl/utils/multimodal.py` 实现 source asset 边界/hash/MIME/尺寸审计、JPEG透传和TIFF LZW无损PNG转换
+- [X] T100 [US2] 在 `src/a2a_dygrade_rl/utils/selfhosted_client.py` 实现可注入transport的 Chat Completions 客户端、真实urllib transport、Fake transport、实际body捕获、模型/usage/JSON fail-closed校验和attempt记录
+- [X] T101 [US2] 扩展 `src/a2a_dygrade_rl/agents/pricing.py`、`base_agent.py`、`cache.py` 和 `agent_registry.py`，写入文本/视觉Token、logical_call_id、canonical attempt、API等价成本、服务器成本与retry overhead，保持旧Responses Pilot兼容
+
+### P6：固定5 Item checkpoint与门禁
+
+- [X] T102 [US2] 在 `src/a2a_dygrade_rl/agents/selfhosted_checkpoint.py` 实现从 Semantic V2 train_fit strict Paper 无Gold确定性选择1份覆盖三数据集且含图像的5题checkpoint，并生成冻结manifest
+- [X] T103 [US2] 在 `src/a2a_dygrade_rl/agents/selfhosted_validation.py` 实现15条canonical、身份、Schema、范围、DREsS三维、SAS whole-response、图片、Gold、Token、成本、attempt和resume门禁
+- [X] T104 [US2] 新增 `scripts/08_prepare_selfhosted_checkpoint.py`、`09_run_selfhosted_agent_cache.py`、`10_validate_selfhosted_checkpoint.py` 和 `11_audit_selfhosted_local_readiness.py`，脚本仅编排业务模块并强制唯一run_id/fixture与real边界
+
+### P7：本地Fake/Fixture验证
+
+- [X] T105 [US2] 运行新增单元测试并修复问题；使用唯一run_id生成固定5题checkpoint，执行15调用Fake workflow、validator与resume，所有产物写入 `outputs/runs/<run_id>/`
+- [X] T106 [US2] 复核 Semantic Readiness、运行全仓pytest和仓库结构检查，保存 `outputs/runs/selfhosted_local_readiness_20260812_001/logs/` 与 `reports/`，确认在线调用/下载/依赖安装/服务器操作计数均为0
+
+### P8：服务器交接与实现后审核
+
+- [X] T107 [US2] 在 `docs/design/server_handoff/` 生成模型审批、环境锁定、数据传输hash、价格/费用上限、部署命令模板、5 Item runbook和返回产物manifest；不得包含密钥、权重或实际服务器操作
+- [X] T108 [US2] 执行 spec/plan/tasks 一致性分析、`verify-tasks`、`verify` 和代码/测试/错误处理审查，修复所有CRITICAL/HIGH后重跑，并将结果写入 `outputs/runs/selfhosted_local_readiness_20260812_001/reports/`
+- [X] T109 [US2] 完成逐项 P1–P8 审计，更新本阶段任务为真实完成状态；只有证据证明所有要求完成且真实服务器相关计数为0时才能关闭本阶段
+
+### 依赖顺序
+
+```text
+T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 → T109
+```
+
+### 并行机会
+
+- T093、T094、T095、T096 可在契约冻结后并行编写测试。
+- T099 与 T097/T098 可并行；T100 依赖Schema和多模态接口，T101依赖客户端metadata契约。
+- T107 可在实现稳定后与T106的测试运行并行准备，但最终hash/commit字段必须在收敛后更新。

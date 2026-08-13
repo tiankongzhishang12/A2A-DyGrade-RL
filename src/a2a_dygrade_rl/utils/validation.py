@@ -421,6 +421,8 @@ def validate_agent_output(
         raise ValueError("AgentOutput token_usage 必须为非负整数")
     detailed_token_fields = (
         "input_tokens",
+        "input_text_tokens",
+        "input_vision_tokens",
         "cached_input_tokens",
         "cache_write_tokens",
         "output_tokens",
@@ -434,8 +436,12 @@ def validate_agent_output(
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise ValueError(f"AgentOutput {field} 必须为非负整数")
             values[field] = value
+        if values["input_text_tokens"] + values["input_vision_tokens"] > values["input_tokens"]:
+            raise ValueError("AgentOutput text+vision tokens 不得大于 input_tokens")
         if values["cached_input_tokens"] > values["input_tokens"]:
             raise ValueError("AgentOutput cached_input_tokens 不得大于 input_tokens")
+        if values["cached_input_tokens"] + values["cache_write_tokens"] > values["input_tokens"]:
+            raise ValueError("AgentOutput cached+cache-write tokens 不得大于 input_tokens")
         if values["reasoning_tokens"] > values["output_tokens"]:
             raise ValueError("AgentOutput reasoning_tokens 不得大于 output_tokens")
         if token_usage != values["input_tokens"] + values["output_tokens"]:
@@ -461,6 +467,10 @@ def validate_agent_output(
         ("prompt_hash", "input_hash", "context_hash", "cache_key"),
         "AgentOutput",
     )
+    if "logical_call_id" in record:
+        if record["logical_call_id"] != record["cache_key"]:
+            raise ValueError("AgentOutput logical_call_id 必须等于 cache_key")
+        _validate_sha256_fields(record, ("logical_call_id",), "AgentOutput")
     if record["status"] == SUCCESS_STATUS:
         if record["pred_score"] is None:
             raise ValueError("成功 AgentOutput 必须包含 pred_score")
@@ -818,6 +828,3 @@ def validate_paired_bootstrap_gate_result(record: dict[str, Any]) -> None:
             raise ValueError("失败 Gate 不得标记 quality_noninferiority_pass")
         if not str(record.get("failure_reason", "")).strip():
             raise ValueError("失败或不确定 Gate 必须记录 failure_reason")
-
-
-

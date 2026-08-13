@@ -1,4 +1,4 @@
-﻿"""真实 Agent token 使用量、官方价格快照与预算门。"""
+"""真实 Agent token 使用量、官方价格快照与预算门。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from a2a_dygrade_rl.utils.io import file_sha256, read_yaml
 @dataclass(frozen=True)
 class TokenUsage:
     input_tokens: int = 0
+    input_text_tokens: int = 0
+    input_vision_tokens: int = 0
     cached_input_tokens: int = 0
     cache_write_tokens: int = 0
     output_tokens: int = 0
@@ -23,16 +25,26 @@ class TokenUsage:
     @classmethod
     def from_api(cls, usage: dict[str, Any] | None) -> "TokenUsage":
         payload = dict(usage or {})
-        input_details = dict(payload.get("input_tokens_details") or {})
-        output_details = dict(payload.get("output_tokens_details") or {})
-        input_tokens = _nonnegative_int(payload.get("input_tokens", 0), "input_tokens")
+        input_details = dict(payload.get("input_tokens_details") or payload.get("prompt_tokens_details") or {})
+        output_details = dict(payload.get("output_tokens_details") or payload.get("completion_tokens_details") or {})
+        input_tokens = _nonnegative_int(payload.get("input_tokens", payload.get("prompt_tokens", 0)), "input_tokens")
+        input_text_tokens = _nonnegative_int(
+            input_details.get("text_tokens", input_details.get("text_input_tokens", 0)),
+            "input_text_tokens",
+        )
+        input_vision_tokens = _nonnegative_int(
+            input_details.get("image_tokens", input_details.get("vision_tokens", input_details.get("image_input_tokens", 0))),
+            "input_vision_tokens",
+        )
         cached = _nonnegative_int(input_details.get("cached_tokens", 0), "cached_input_tokens")
         cache_write = _nonnegative_int(input_details.get("cache_write_tokens", 0), "cache_write_tokens")
-        output_tokens = _nonnegative_int(payload.get("output_tokens", 0), "output_tokens")
+        output_tokens = _nonnegative_int(payload.get("output_tokens", payload.get("completion_tokens", 0)), "output_tokens")
         reasoning = _nonnegative_int(output_details.get("reasoning_tokens", 0), "reasoning_tokens")
         total = _nonnegative_int(payload.get("total_tokens", input_tokens + output_tokens), "total_tokens")
         result = cls(
             input_tokens=input_tokens,
+            input_text_tokens=input_text_tokens,
+            input_vision_tokens=input_vision_tokens,
             cached_input_tokens=cached,
             cache_write_tokens=cache_write,
             output_tokens=output_tokens,
@@ -46,16 +58,28 @@ class TokenUsage:
         for name, value in asdict(self).items():
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise ValueError(f"TokenUsage {name} 必须为非负整数")
+        if self.input_text_tokens + self.input_vision_tokens > self.input_tokens:
+            raise ValueError("input_text_tokens + input_vision_tokens 不得大于 input_tokens")
         if self.cached_input_tokens > self.input_tokens:
             raise ValueError("cached_input_tokens 不得大于 input_tokens")
+        if self.cached_input_tokens + self.cache_write_tokens > self.input_tokens:
+            raise ValueError("cached_input_tokens + cache_write_tokens 不得大于 input_tokens")
         if self.reasoning_tokens > self.output_tokens:
             raise ValueError("reasoning_tokens 不得大于 output_tokens")
         if self.total_tokens != self.input_tokens + self.output_tokens:
             raise ValueError("total_tokens 必须等于 input_tokens + output_tokens")
 
     @property
+    def ordinary_input_tokens(self) -> int:
+        """不属于缓存读取或缓存写入分区的普通输入Token。"""
+
+        return self.input_tokens - self.cached_input_tokens - self.cache_write_tokens
+
+    @property
     def uncached_input_tokens(self) -> int:
-        return self.input_tokens - self.cached_input_tokens
+        """兼容旧调用方；语义为普通输入分区，不包含另行计价的cache-write Token。"""
+
+        return self.ordinary_input_tokens
 
     def to_dict(self) -> dict[str, int]:
         return asdict(self)
@@ -169,7 +193,7 @@ def compute_api_cost(usage: TokenUsage, rule: PricingRule) -> float:
     total = (
         input_multiplier
         * (
-            usage.uncached_input_tokens * rule.input_per_million_usd
+            usage.ordinary_input_tokens * rule.input_per_million_usd
             + usage.cached_input_tokens * rule.cached_input_per_million_usd
             + usage.cache_write_tokens * rule.cache_write_per_million_usd
         )
@@ -178,6 +202,24 @@ def compute_api_cost(usage: TokenUsage, rule: PricingRule) -> float:
     if not math.isfinite(total) or total < 0.0:
         raise ValueError("Computed API cost is invalid")
     return float(total)
+
+
+def compute_server_allocated_cost(
+    *,
+    latency_seconds: float,
+    server_hourly_price_usd: float | None,
+) -> float | None:
+    """按单次请求占用时长分摊服务器租金；未冻结小时价时返回 None。"""
+
+    if server_hourly_price_usd is None:
+        return None
+    latency = float(latency_seconds)
+    hourly = float(server_hourly_price_usd)
+    if not math.isfinite(latency) or latency < 0.0:
+        raise ValueError("latency_seconds 必须为非负有限数值")
+    if not math.isfinite(hourly) or hourly < 0.0:
+        raise ValueError("server_hourly_price_usd 必须为非负有限数值")
+    return hourly * latency / 3600.0
 
 
 class BudgetExceededError(RuntimeError):

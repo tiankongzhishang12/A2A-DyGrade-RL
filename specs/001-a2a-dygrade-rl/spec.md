@@ -2,8 +2,8 @@
 
 **功能分支**：`001-a2a-dygrade-rl`
 **创建日期**：2026-07-04
-**最后修订**：2026-08-11
-**状态**：V1.5 Dataset Semantic V2 数据整改已于2026-08-11完成；Semantic Readiness 与 internal audit 均为 PASS，尚未下载模型、安装新依赖或调用真实推理服务
+**最后修订**：2026-08-12
+**状态**：V1.6 自托管 Ministral 3 Pilot 本地准备执行中；Dataset Semantic V2 已完成且 Semantic Readiness/internal audit 均为 PASS；P1–P8 仅允许本地开发、Mock/Fixture 测试与服务器交接准备，不下载模型、不安装新依赖、不调用真实推理服务
 **输入**：用户确认主研究对象是固定 Agent 环境中的动态路由增益，而不是先把基础阅卷器做到生产级准确率；DREsS 主实验采用无 Anchor 的 Content、Organization、Language 三维评分；ASAP-SAS 必须恢复官方 Prompt/Rubric 并使用 Score1 作为最终 Gold；SAS-Bench 必须从 Step Item 改为完整学生回答 Item；旧 100 Item Pilot 只保留为 cliproxy、模型身份、结构化输出、Token 与成本链路的工程证据，不得作为正式论文评分结果或 Formal cache。
 
 ---
@@ -325,6 +325,24 @@ max_a2a_exchanges
 - **FR-073**：自托管多模态 Agent 在 cache 阶段必须从 Item 的稳定 source asset 解析图片，并记录实际模型/Processor产生的文本 Token、视觉 Token、缩放参数和输入 hash；这些运行时字段不得反向修改 prepared data。
 - **FR-074**：从 API 调用改为租用服务器自托管只允许改变 Agent 执行与成本来源，不得改变三个数据集的 Gold、Scoring Unit、无 Anchor 协议、split、Paper 或 Semantic Readiness 标准。
 
+### 5.9 V1.6 自托管 Ministral 3 Pilot 本地准备（P1–P8）
+
+- **FR-075**：P1–P8 必须全部在本地完成，只允许修改代码、配置、Prompt、测试、文档和本地 Mock/Fixture 产物；在线模型调用、模型权重下载、服务器租用、CUDA/PyTorch/vLLM/SGLang 安装和真实 GPU 推理次数必须均为0。
+- **FR-076**：自托管真实客户端必须使用 OpenAI-compatible `POST /v1/chat/completions` 契约，支持文本与 base64 图像块、严格 JSON 输出、模型身份校验、有效 `usage` 校验、硬预算、有限重试和可注入传输层；不得把 CLIProxy `Responses` 客户端伪装成自托管实现。
+- **FR-077**：候选 Agent 池必须冻结为同一 Ministral 3 Instruct 家族：Cheap=`mistralai/Ministral-3-3B-Instruct-2512-BF16`、Mid=`mistralai/Ministral-3-8B-Instruct-2512-BF16`、Strong=`mistralai/Ministral-3-14B-Instruct-2512-BF16`；三者使用同一 Prompt、同一 JSON Schema、`temperature=0`、非 Thinking 和相同输出上限；模型可见请求中不得包含 Cheap/Mid/Strong 的角色名或能力暗示，除 `model` 外的请求语义 hash 必须一致。权重 revision 在服务器下载后再冻结，P1–P8 不得编造 revision。
+- **FR-078**：自托管请求必须从 Dataset Semantic V2 prepared root 解析 `source_assets`，校验相对路径不越界、字节数、SHA-256 和 MIME；JPEG 保持原字节，TIFF 必须确定性无损转码为 PNG，记录源/发送尺寸、源/发送 MIME、转换方式和发送字节 hash，且不得修改 prepared data。
+- **FR-079**：模型可见 HTTP 请求体必须通过显式白名单构建，递归出现 Gold、隐藏 Trait、Score1/Score2、manual label、Step label/error、raw/derived total 或等价键的次数必须为0；本地 Mock 必须捕获并审计实际序列化 body，而不是只审计内存中的 Item。
+- **FR-080**：自托管评分输出必须支持通用分数、置信度、理由和证据；DREsS 必须额外返回 Content、Organization、Language 三维分数，三维均在0–5且总分与三维和一致；非 DREsS 的 trait scores 必须为空。
+- **FR-081**：Token 账本必须优先采用推理服务实际返回的 `prompt_tokens`、`completion_tokens` 和 `total_tokens`；三者缺失、为负或不自洽时请求失败。多模态 Item 在正式 checkpoint 中还必须具有服务器/Processor 提供的文本与视觉 Token 分解，否则门禁失败，不得用字符数估算冒充正式 Token。
+- **FR-082**：每次成功调用必须同时记录 `official_api_equivalent_token_cost` 和可选的 `actual_server_allocated_cost`。前者按冻结的 Mistral 官方输入/输出百万 Token 价格计算，后者仅在服务器小时价与分摊时长均可审计时计算；二者不得混称 Actual API Bill。
+- **FR-083**：每个 `Item × Agent` 必须具有稳定 `logical_call_id`。正式 canonical cost 只统计一条最终成功调用；每次 HTTP 尝试必须产生独立 attempt audit，失败重试、超时、OOM 和服务重启的Token成本与可审计服务器时长成本分别进入 `operational_retry_overhead` 和 `operational_retry_server_overhead`，不得重复计入 canonical experiment cost；进程重启必须从attempt账本恢复已发生调用数与成本。
+- **FR-084**：本地必须确定性生成一份5题 checkpoint：来自 `train_fit` 的一份 strict Paper，恰含5个唯一 Item，覆盖 ASAP-SAS、DREsS、SAS-Bench，且至少一个 ASAP-SAS Item 带必要图片；样本选择不得读取 Gold，清单生成后按源文件 hash、种子和选择规则冻结。
+- **FR-085**：真实 checkpoint 只允许 Cheap/Mid/Strong，共15个 canonical 调用；Evidence/Arbitrator、Dev/Test、30/100/1000 Item 入口在 checkpoint PASS 前必须为0。门禁至少检查身份、结构、范围、DREsS三维和、SAS whole-response、图片审计、Gold隔离、Token、成本、attempt/canonical唯一性和 resume 幂等性。
+- **FR-086**：本地必须提供无需真实模型的 Fake OpenAI-compatible 服务或可注入 transport，覆盖正常、JPEG/TIFF图片、非JSON、模型替换、usage缺失/不自洽、分数/trait非法、HTTP可重试/不可重试、断点恢复、跨进程预算恢复、单模型分阶段合并和预算硬门；Mock 输出只能标记 `formal_eligible=false`，不得进入能力画像、Router、Baseline或论文结果。
+- **FR-087**：服务器交接材料必须冻结代码提交、数据传输 manifest、模型审批项、环境与磁盘路径、费用/时长/调用上限、部署命令模板、5 Item runbook 和返回产物清单；不得包含密钥、模型权重、本地虚拟环境或未批准下载命令的实际执行。
+- **FR-088**：P1–P8 完成前必须运行新增单元/集成测试、完整测试套件、仓库结构检查、规格—计划—任务一致性分析、实现后 verify、任务真实性检查和代码/测试/错误处理审查；发现高风险缺口必须修复后重跑，不得仅以测试“没有失败”代替逐项验收。
+
+
 ## 6. 关键实体
 
 - **Dataset Semantic V2 Item**：按数据集真实 Scoring Unit 构造的单条学生作答；包含模型可见题目、作答、Rubric/reference、分值范围，以及模型不可见 Gold、评分模式、来源指纹和正式资格 metadata。
@@ -397,6 +415,16 @@ max_a2a_exchanges
 - **SC-035**：ASAP-SAS 官方描述中的全部图片资产均保留原始字节哈希、MIME、来源 URI 和可解析相对路径；必要图片被静默丢失、仅保留人工转录或写入模型专用视觉表示的数量均为0。
 - **SC-036**：Dataset Semantic V2 Item 与资源目录不包含任何具体模型 Tokenizer、视觉 Processor、GPU 或推理引擎生成的 Token/embedding；模型专用图像处理只出现在后续 Agent cache 运行产物。
 - **SC-037**：相同 Dataset Semantic V2 资产可由本地自托管 Agent 或另行批准的 API Agent 消费，二者使用完全相同的 Gold、split、Paper 和模型可见语义字段。
+- **SC-038**：P1–P8 的 `online_agent_calls`、`model_downloads`、`dependency_installs`、`server_rental_actions`、`cuda_runtime_installs` 和 `prepared_data_writes` 均为0；所有本地运行产物均具有唯一 `run_id` 且 `formal_eligible=false`。
+- **SC-039**：Cheap/Mid/Strong 三个配置的模型家族、Prompt hash、Schema hash、temperature、Thinking模式、输出上限和图片策略除模型ID外完全一致；Evidence/Arbitrator 不在 checkpoint support catalog 中。
+- **SC-040**：4个 ASAP-SAS 正式 source asset 均通过路径、大小、SHA-256、MIME和可解码性检查；2个TIFF均可确定性转为相同尺寸PNG，原始prepared文件修改数为0。
+- **SC-041**：Fake服务捕获的每一个序列化请求体均无禁用Gold键；文本、JPEG、TIFF和无图片四类请求均通过Chat Completions契约测试；同一Item的三档请求除模型ID外语义hash完全相同。
+- **SC-042**：正常Mock的Token/价格/attempt/canonical账本逐字段可重算；usage缺失或不自洽、模型替换、非法JSON、越界分数和DREsS三维不一致均被fail-closed拒绝。
+- **SC-043**：5 Item checkpoint manifest 恰含1份strict Paper、5个唯一train_fit Item、3个数据集且至少1个图像Item，选择过程Gold读取次数为0；预期canonical调用数固定为15；服务器传输manifest只包含该checkpoint、必要lineage/Readiness和实际引用资产，不传Dev/Test。
+- **SC-044**：本地checkpoint workflow在Fake服务上完成15条成功canonical记录，resume再次执行产生的新HTTP请求数为0；失败attempt保留但canonical成本不重复累计。
+- **SC-045**：服务器交接包包含模型/环境/数据/费用/runbook/返回产物六类材料且不含密钥、权重、C盘实验路径或实际服务器操作；P1–P8完成报告逐项给出证据路径与测试命令。
+- **SC-046**：新增测试与全仓测试全部通过，spec/plan/tasks中的V1.6要求都有已完成任务和实现证据，任务真实性、verify和专项review不存在未解决的CRITICAL/HIGH问题。
+
 
 ## 8. 非目标
 

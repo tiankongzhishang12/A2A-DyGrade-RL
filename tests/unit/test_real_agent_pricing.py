@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
@@ -32,7 +32,7 @@ def test_token_usage_and_official_cost_do_not_double_count_reasoning():
         cache_write_per_million_usd=3.125,
         output_per_million_usd=15.0,
     )
-    expected = (2200 * 2.5 + 1000 * 0.25 + 200 * 3.125 + 700 * 15.0) / 1_000_000
+    expected = (2000 * 2.5 + 1000 * 0.25 + 200 * 3.125 + 700 * 15.0) / 1_000_000
     assert compute_api_cost(usage, rule) == pytest.approx(expected)
     assert usage.reasoning_tokens == 450
     assert usage.output_tokens == 700
