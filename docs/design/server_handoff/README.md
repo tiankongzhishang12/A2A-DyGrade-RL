@@ -10,7 +10,7 @@
 - 未执行真实模型推理；
 - 本地 Fake checkpoint PASS 只证明请求、图片、Schema、Token/成本和 resume 契约成立；
 - `30 Item Pilot` 仍未解锁；
-- 当前交接包的 `code_commit` 明确为 `pending_clean_commit_after_p1_p8_completion`，因为本地实现尚未由用户要求提交；服务器阶段前必须由最终干净commit替换，不能把工作树HEAD冒充已冻结提交。
+- 已冻结本阶段实现提交：`44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`；服务器必须拉取并核对该 commit。当前后续交接元数据提交不会改变已冻结的执行代码、配置、Prompt或测试。
 
 ## 服务器阶段顺序
 

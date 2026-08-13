@@ -1,5 +1,5 @@
 schema_version: selfhosted_model_approval_v1
-code_commit: pending_clean_commit_after_p1_p8_completion
+code_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
 dirty_worktree_required: false
 status: pending_user_and_server_approval
 family: Ministral 3 Instruct
