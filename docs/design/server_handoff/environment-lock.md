@@ -52,7 +52,7 @@ output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
 ## Commit与工作树门禁
 
 - `frozen_implementation_commit=44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`。
-- `workspace_handoff_commit` 在T113提交后填写。
+- `workspace_handoff_commit=85e4cb26778d26f2462041986143f70bdcc54998` 已冻结并推送到Git远程仓库；AutoDL工作树同步后还必须核对该提交为祖先且交接文件hash一致。
 - 真实run必须记录当前工作区commit、冻结实现commit和 `dirty_worktree=false`。
 - 新文档提交可以位于冻结实现commit之后，但 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 相对冻结实现不得出现未批准变化。
 

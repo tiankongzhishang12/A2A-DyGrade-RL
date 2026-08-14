@@ -10,7 +10,7 @@ V1.6 P1–P8本地准备已经完成。当前不要从本文件直接启动真�
 4. `docs/design/server_handoff/environment-lock.md`；
 5. `docs/design/server_handoff/checkpoint-runbook.md`。
 
-当前下一步是T113文档提交/远程同步和T113A最小10文件数据传输，不是直接启动GPU、vLLM或真实5 Item。统一远程路径为 `/root/autodl-tmp/a2a-dygrade/`；服务器租金不进入论文实验成本。
+V1.7文档内容提交已经推送Git远程仓库；后续下一步是T113的AutoDL工作树同步和T113A最小10文件数据传输，不是直接启动GPU、vLLM或真实5 Item。统一远程路径为 `/root/autodl-tmp/a2a-dygrade/`；服务器租金不进入论文实验成本。
 
 ---
 

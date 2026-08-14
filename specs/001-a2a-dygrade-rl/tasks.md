@@ -2,7 +2,7 @@
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
-**同步版本**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档契约已同步，V1.6 本地准备已完成；当前等待 T113 提交/远程同步，并继承 V1.4 Quality Champion 质量保护与正式质量协议
+**同步版本**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档契约已收敛并推送Git远程仓库，V1.6 本地准备已完成；当前仅等待 T113 的AutoDL工作树同步部分，并继承 V1.4 Quality Champion 质量保护与正式质量协议
 
 **前置文档**：plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 
@@ -470,6 +470,6 @@ T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
 
 ### Phase 10用户审阅门禁
 
-- 本次 V1.7 文档整改只实现并核对文档、manifest 和模板，不自动执行 T113 的 Git 提交/推送、远程同步或任何真实服务器操作。
+- 本次用户指令只批准完成V1.7文档、manifest和模板并提交/推送Git远程仓库；不执行AutoDL工作树同步、数据传输、环境安装、GPU或真实模型操作。
 - T110–T112 按服务器实际完成证据标记为 `[X]`；T112A、T113–T125A 保持 `[ ]`，不得把文档已写、模型已下载或 Fake PASS 误报为下载产物回传、远程 Codex、真实 Smoke、数据传输、5 Item、30 Item或产物回传完成。
-- 用户已确认 V1.7 文档整改方案；文档验证通过后仍需用户单独指令才从 T113 开始提交、推送与远程同步。
+- 用户已确认并要求完成文档提交与Git远程推送；T113仍保持 `[ ]`，直到其AutoDL同步、commit/hash和clean tree验收全部完成。

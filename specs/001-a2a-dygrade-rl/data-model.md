@@ -102,7 +102,7 @@
 
 ### ServerHandoffManifest
 
-- `frozen_implementation_commit`、`workspace_handoff_commit`、`dirty_worktree_required`；前者冻结执行代码，后者记录最新交接文档提交。
+- `frozen_implementation_commit`、`workspace_handoff_commit`、`dirty_worktree_required`；前者冻结执行代码，后者记录已审核并推送的交接内容提交。由于commit不能自引用，单纯写入该指针的metadata-only提交可以晚于该commit。
 - 模型、许可证、revision冻结要求。
 - 环境/GPU/磁盘路径和禁止C盘规则。
 - data transfer文件、大小、SHA-256。

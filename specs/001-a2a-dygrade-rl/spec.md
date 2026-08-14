@@ -3,7 +3,7 @@
 **功能分支**：`001-a2a-dygrade-rl`
 **创建日期**：2026-07-04
 **最后修订**：2026-08-14
-**状态**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档收敛中；V1.6 本地准备 P1–P8 已完成，Dataset Semantic V2 与 internal audit 均为 PASS；AutoDL 服务器、远程仓库迁移和 14B BF16 下载/完整性校验已完成，GPU 当前关闭；远程 Codex、最小数据传输、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item 和 30 Item 均未完成
+**状态**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档已收敛并推送Git远程仓库；V1.6 本地准备 P1–P8 已完成，Dataset Semantic V2 与 internal audit 均为 PASS；AutoDL 服务器、远程仓库迁移和 14B BF16 下载/完整性校验已完成，GPU 当前关闭；AutoDL工作树同步、远程 Codex、最小数据传输、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item 和 30 Item 均未完成
 **输入**：用户确认主研究对象是固定 Agent 环境中的动态路由增益，而不是先把基础阅卷器做到生产级准确率；DREsS 主实验采用无 Anchor 的 Content、Organization、Language 三维评分；ASAP-SAS 必须恢复官方 Prompt/Rubric 并使用 Score1 作为最终 Gold；SAS-Bench 必须从 Step Item 改为完整学生回答 Item；旧 100 Item Pilot 只保留为 cliproxy、模型身份、结构化输出、Token 与成本链路的工程证据，不得作为正式论文评分结果或 Formal cache。
 
 ---

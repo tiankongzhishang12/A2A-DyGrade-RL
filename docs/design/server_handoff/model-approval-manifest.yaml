@@ -1,6 +1,6 @@
 schema_version: selfhosted_model_approval_v2
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-workspace_handoff_commit: pending_t113
+workspace_handoff_commit: 85e4cb26778d26f2462041986143f70bdcc54998
 dirty_worktree_required: false
 status: partially_executed
 family: Ministral 3 Instruct

@@ -97,11 +97,11 @@
 
 ```text
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-workspace_handoff_commit: pending_t113
+workspace_handoff_commit: 85e4cb26778d26f2462041986143f70bdcc54998
 ```
 
 - `frozen_implementation_commit`证明自托管Pilot执行代码、配置、Prompt和测试的冻结基线。
-- `workspace_handoff_commit`在T113提交后填写，证明远程Codex读取的是最新治理、规格、任务和服务器契约。
+- `workspace_handoff_commit`记录已经审核并推送到Git远程仓库的交接内容冻结提交。由于提交无法自引用，后续仅写入该指针或更新状态的metadata-only提交可以晚于该commit；不得借metadata提交静默改变执行代码、配置、Prompt或测试。
 - 文档提交可以位于冻结实现之后，但必须核对 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 未出现未批准变化。
 
 ### 仓库路径
@@ -209,7 +209,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 ## 9. 当前尚未完成内容
 
-- 最新V1.7文档尚未形成T113提交或同步到远程；
+- V1.7交接内容提交 `85e4cb26778d26f2462041986143f70bdcc54998` 已推送到Git远程分支；AutoDL服务器工作树同步仍属于T113未完成部分；
 - 冻结5 Item所需10个最小文件尚未执行T113A传输和远程hash接收审计；
 - 现有14B下载run尚未执行T112A Profile A回传和本地hash复核；
 - 远程 Codex CLI / Desktop SSH Remote 尚未完成部署和认证；
@@ -231,8 +231,8 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 ### 阶段 A：文档、Git与最小数据（不需要GPU）
 
-1. T113收敛并提交V1.7文档，通过Git或Git bundle同步同一commit；
-2. 写入 `workspace_handoff_commit` 并确认远程工作树干净；
+1. V1.7交接内容commit已推送Git远程仓库；T113剩余工作是通过Git或Git bundle同步到AutoDL工作树；
+2. 核对 `workspace_handoff_commit`、当前Git HEAD、交接文件hash并确认远程工作树干净；
 3. T113A传输冻结5 Item所需10个最小文件并生成接收receipt；
 4. receipt必须满足expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0；
 5. T112A将现有14B下载run按Profile A回传本地并完成hash复核，不回传模型权重。
