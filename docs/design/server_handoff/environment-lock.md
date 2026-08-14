@@ -1,15 +1,20 @@
 # 服务器环境冻结要求
 
-## 待审批硬件
+> **状态快照**：2026-08-14。硬件与14B权重已经核验；推理软件环境尚未安装和冻结。所有路径必须位于AutoDL数据盘。
 
-- GPU：模型官方上下文上限为256K，但首轮Pilot人为批准的运行上限固定为32K；服务器必须能够以统一精度稳定容纳14B模型、视觉编码器和该32K以内KV cache。首选单卡48GB以上，最终以部署 smoke 峰值显存为准。
-- GPU数量：首轮顺序加载，默认1张；不得为同时常驻三模型额外租卡。
-- 系统盘/数据盘：模型、虚拟环境、缓存、prepared data和run产物全部放服务器数据盘；禁止写入本地C盘约定路径。
-- 磁盘空间：审批前核对三套权重、容器/环境缓存和run产物总量，保留至少20%余量。
+## 已核验硬件
+
+- GPU：NVIDIA GeForce RTX 4090D，显存约48GB。
+- GPU数量：1张；Cheap/Mid/Strong顺序加载，不为同时常驻三模型额外租卡。
+- CPU：GPU实例启动后约20核。
+- 内存：GPU实例启动后约90GB。
+- 低资源保留状态：约0.5核CPU、2GB内存、无GPU。
+- 当前GPU状态：关闭。
+- 磁盘：模型、虚拟环境、缓存、prepared data和run产物全部放数据盘；任何阶段开始前重新检查容量并保留至少20%余量。
 
 ## 待冻结软件版本
 
-真实部署后必须在run配置中保存：
+T116恢复GPU后，必须在唯一run配置中记录：
 
 ```text
 OS image / image digest
@@ -18,28 +23,57 @@ NVIDIA driver
 CUDA runtime
 Python
 PyTorch
-vLLM or SGLang
+vLLM
 Transformers / Mistral processor stack
 pip freeze or container digest
 ```
 
-P1–P8没有安装或声称某个具体版本可用。服务器应先根据模型官方说明做兼容性 smoke，再把真实版本写入 `outputs/runs/<run_id>/configs/environment-lock.json`。
-
-## 目录模板
+实际版本写入：
 
 ```text
-/mnt/experiments/A2A-DyGrade-RL/       # Git工作区
-/mnt/models/ministral3/{3b,8b,14b}/    # 权重
-/mnt/cache/huggingface/                 # 下载缓存
-/mnt/data/semantic_v2/                  # prepared data
-/mnt/outputs/runs/<run_id>/             # 实验产物
+outputs/runs/selfhosted_14b_smoke_<timestamp>/configs/environment-lock.json
 ```
 
-## 安全门
+在真实版本形成前，不得把模板版本或本地版本写成服务器已验证版本。
 
-- 真实run必须记录干净commit，`dirty_worktree=false`。
-- 模型revision不得保留`pending_server_freeze`。
-- `/v1/models`和每个响应的`model`必须匹配请求。
-- 多模态响应必须返回视觉Token分解。
-- 服务器解析配置的两个 prepared_root 均必须为 /mnt/data/semantic_v2，命令必须显式传入 --output-root /mnt/outputs/runs。
-- 未通过上述门禁时不执行5 Item。
+## 冻结目录
+
+```text
+project_root: /root/autodl-tmp/a2a-dygrade
+repo_root: /root/autodl-tmp/a2a-dygrade/repo
+model_root: /root/autodl-tmp/a2a-dygrade/models/ministral3
+runtime_root: /root/autodl-tmp/a2a-dygrade/runtime
+prepared_root: /root/autodl-tmp/a2a-dygrade/repo/data/processed/semantic_v2
+output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
+```
+
+真实解析配置中的顶层 `prepared_root` 与 `provider.prepared_root` 必须同时等于上述 `prepared_root`；命令必须显式传入上述 `output_root`。不得继续使用历史模板中的 `/mnt/...` 路径。
+
+## Commit与工作树门禁
+
+- `frozen_implementation_commit=44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`。
+- `workspace_handoff_commit` 在T113提交后填写。
+- 真实run必须记录当前工作区commit、冻结实现commit和 `dirty_worktree=false`。
+- 新文档提交可以位于冻结实现commit之后，但 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 相对冻结实现不得出现未批准变化。
+
+## 数据门禁
+
+- 14B图片Smoke和真实5 Item前，T113A的 `data-transfer-receipt.json.status` 必须为 `PASS`。
+- 接收结果必须满足expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0。
+- 30 Item使用独立 `pilot30-data-transfer-manifest.json`，不得把5 Item最小manifest冒充30 Item输入。
+
+## 分阶段模型revision门禁
+
+- 14B Smoke：只要求StrongAgent revision冻结且下载manifest PASS。
+- 3B Smoke：要求CheapAgent revision冻结。
+- 8B Smoke：要求MidAgent revision冻结。
+- 真实5 Item：要求Cheap/Mid/Strong三个revision全部冻结，且三个模型Smoke均PASS。
+
+## 服务与Token门禁
+
+- `/v1/models`和每个响应的 `model` 必须匹配请求。
+- 服务必须返回有效 `prompt_tokens`、`completion_tokens` 和 `total_tokens`。
+- 多模态Smoke和真实checkpoint必须返回文本/视觉Token分解。
+- `max_model_len=32768`、`temperature=0`、非Thinking、单模型常驻。
+- 服务器租金不属于论文实验成本；`server_hourly_price_usd`固定为 `null`。
+- 未通过任一阶段门禁时，不执行其后续模型、真实5 Item或30 Item。

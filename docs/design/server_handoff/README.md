@@ -1,39 +1,50 @@
 # 自托管 Ministral 3 Pilot 服务器交接包
 
-## 当前边界
+> **当前入口**：远程服务器、模型、GPU、任务与审批状态以 `remote-codex-handoff.md` 为准。原P8“未租服务器、未下载模型”描述只属于2026-08-13之前的本地准备历史边界。
 
-本目录是 **P8 本地准备产物**。截至 2026-08-13：
+## 当前状态（2026-08-14）
 
-- 未租用或连接 GPU 服务器；
-- 未下载任何模型权重；
-- 未安装 CUDA、PyTorch、vLLM、SGLang、Pillow 或其他新依赖；
-- 未执行真实模型推理；
-- 本地 Fake checkpoint PASS 只证明请求、图片、Schema、Token/成本和 resume 契约成立；
-- `30 Item Pilot` 仍未解锁；
-- 已冻结本阶段实现提交：`44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`；服务器必须拉取并核对该 commit。当前后续交接元数据提交不会改变已冻结的执行代码、配置、Prompt或测试。
+- V1.6本地准备P1–P8已完成。
+- AutoDL服务器和远程Git仓库已准备。
+- 14B BF16固定revision已下载并完成远程完整性检查；Profile A回传和本地复核尚未执行。
+- GPU当前关闭；推理环境和真实14B Smoke尚未执行。
+- 3B/8B、真实5 Item、30 Item和Formal均未解锁。
+- 评分质量优先，资源不可补偿质量失败。
+- 论文主成本只使用Official API-Equivalent Token Cost；服务器租金不进入实验指标。
 
-## 服务器阶段顺序
+## 当前执行顺序
 
-1. 用户审批模型、GPU、时长、费用上限、磁盘路径与联网下载；
-2. 本地工作树收敛为干净 Git commit；
-3. 服务器拉取固定 commit；
-4. 在服务器数据盘创建环境与缓存，不使用 C 盘路径；
-5. 按审批 revision 下载三套模型权重；
-6. 同步 `data/processed/semantic_v2/` 并核对 `data-transfer-manifest.json`；
-7. 顺序启动 3B、8B、14B 服务做身份/usage/图像 smoke；
-8. 执行真实 5 Item checkpoint，共15个 canonical 调用；
-9. validator PASS 且用户审批后才可执行30 Item Pilot。
+1. 收敛并提交V1.7文档；
+2. 同步同一Git提交到远程；
+3. 按 `data-transfer-manifest.json` 传输5 Item最小10文件并校验hash，同时将现有14B下载run按Profile A回传本地复核；
+4. 配置远程Codex并完成无GPU接手Smoke；
+5. 冻结Token价格和调用预算；
+6. 执行14B环境、文本和多模态Smoke并回传本地；
+7. 14B PASS且用户批准后下载和验证3B/8B；
+8. 三模型Smoke均PASS后执行真实5 Item并回传本地重算；
+9. 用户批准后构建30 Item专用传输包；
+10. 执行30 Item、回传和诊断，再决定是否进入Formal。
 
 ## 文件索引
 
-- `model-approval-manifest.yaml`：候选模型与待审批revision/许可/精度。
-- `environment-lock.md`：服务器环境、目录、版本冻结要求。
-- `data-transfer-manifest.json`：只同步Semantic Readiness、实际引用图片和冻结5 Item checkpoint输入，共10个最小必要文件，逐文件记录大小与SHA-256；Dev/Test数据明确排除。
-- `pricing-and-budget.md`：主成本、实际成本和费用硬门。
-- `deployment-command-template.md`：部署命令模板；本地未执行。
-- `checkpoint-runbook.md`：真实5 Item执行与故障恢复步骤。
-- `artifact-return-manifest.md`：服务器必须返回的run产物。
+- `remote-codex-handoff.md`：远程Codex当前接手入口、状态、门禁与首次提示词。
+- `model-approval-manifest.yaml`：服务器与各模型revision、下载和Smoke状态。
+- `environment-lock.md`：真实硬件、目录、软件和分阶段门禁。
+- `data-transfer-manifest.json`：冻结5 Item最小10文件、目标路径和接收审计契约。
+- `pricing-and-budget.md`：Token等价价格与调用预算；不记录服务器租金。
+- `deployment-command-template.md`：使用AutoDL真实路径的部署模板。
+- `checkpoint-runbook.md`：真实5 Item顺序执行、validator、回传与本地复核。
+- `artifact-return-manifest.md`：Download、Smoke、5 Item和30 Item四类产物回传契约。
+
+## 历史冻结实现
+
+```text
+frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
+workspace_handoff_commit: pending_t113
+```
+
+后续文档提交不得静默改变冻结执行代码、配置、Prompt或测试。真实run必须同时记录两个commit语义。
 
 ## 禁止内容
 
-交接包不得包含 API key、SSH 私钥、服务器密码、模型权重、本地 `.venv`、真实下载缓存或未审计的Test数据。
+交接包不得包含API Key、Codex/OAuth Token、SSH私钥、服务器密码、Mihomo订阅、模型权重、虚拟环境、下载缓存、未批准的Dev/Test或全量train数据。

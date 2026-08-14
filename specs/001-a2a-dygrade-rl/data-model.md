@@ -1,8 +1,8 @@
 # 数据模型：A2A-DyGrade-RL 实验流水线
 
-## V1.6 自托管 Ministral 3 Pilot 运行契约
+## V1.7 自托管 Ministral 3 Pilot 运行契约
 
-本节覆盖下文历史API Pilot字段。P1–P8只构造和验证这些实体，不产生真实模型预测。
+本节覆盖下文历史API Pilot字段。P1–P8只构造和验证这些实体，不产生真实模型预测；V1.7服务器阶段继续复用相同实体，并将服务器费用兼容字段固定为可空且不进入论文指标。
 
 ### SelfHostedProviderConfig
 
@@ -62,7 +62,8 @@
 - `status`：success、retryable_failure、terminal_failure。
 - `error`：包含错误类型与消息；HTTP失败由错误文本保留状态码。
 - `requested_model_id`、`reported_model_id`、`pricing_model_id`、`response_id`、`usage`。
-- `official_api_equivalent_cost_usd`、`actual_server_allocated_cost_usd`。
+- `official_api_equivalent_cost_usd`；
+- `actual_server_allocated_cost_usd`：历史兼容字段，本实验固定为 `null`，不得进入论文成本。
 - `request_body_sha256`、`transport_kind`。
 
 `asset_audit` 与 `gold_key_findings` 位于 canonical record 的客户端 metadata；attempt账本保留每次实际传输的身份、usage、成本、延迟和错误，不持久化base64正文。
@@ -76,7 +77,7 @@
 - `logical_call_id`；
 - `canonical_attempt_id`；
 - `official_api_equivalent_cost_usd`；
-- `actual_server_allocated_cost_usd`（可空）；
+- `actual_server_allocated_cost_usd`：可空历史兼容字段，本实验固定为 `null`；
 - `asset_audit`；
 - `input_text_tokens`、`input_vision_tokens`；
 - `serialized_request_sha256`。
@@ -101,14 +102,14 @@
 
 ### ServerHandoffManifest
 
-- `code_commit`、`dirty_worktree_required`；本地未提交阶段必须使用显式pending值，服务器阶段前替换为真实干净commit。
+- `frozen_implementation_commit`、`workspace_handoff_commit`、`dirty_worktree_required`；前者冻结执行代码，后者记录最新交接文档提交。
 - 模型、许可证、revision冻结要求。
 - 环境/GPU/磁盘路径和禁止C盘规则。
 - data transfer文件、大小、SHA-256。
-- 费用/时长/调用上限。
+- Token价格、canonical/attempt/并发/超时/上下文/输出等调用上限；服务器租金不进入论文协议。
 - deployment/checkpoint命令模板。
 - 返回产物路径。
-- `secrets_included=false`、`weights_included=false`、`server_actions_executed=0`。
+- `secrets_included=false`、`weights_included=false`；P1–P8历史准备另记录 `server_actions_executed=0`，V1.7服务器执行状态使用分阶段manifest。
 
 
 ## Dataset Semantic V2 数据契约

@@ -1,4 +1,4 @@
-# V1.6 自托管 Ministral 3 Pilot 本地准备研究决策
+# V1.7 自托管 Ministral 3 Pilot 研究决策
 
 ## 决策1：首轮候选模型族
 
@@ -26,9 +26,9 @@
 
 ## 决策5：Token与价格语义
 
-- **Decision**：主成本为官方API等价Token成本，实际服务器分摊成本为并列辅助指标；二者都不称为Actual API Bill。
-- **Rationale**：统一Router预算单位，同时诚实反映自托管实际支付的是服务器租金。正式Token只接受服务端usage；图片分解缺失会阻塞真实checkpoint。
-- **Alternatives considered**：字符数估算、Tokenizer离线估算或只用服务器时长，均不能同时满足多模态精确Token和跨模型可比性。
+- **Decision**：论文主成本只使用官方API等价Token成本；服务器租金、GPU空闲、模型下载、模型加载、环境安装和远程Codex操作不属于论文实验指标。
+- **Rationale**：Token由服务端usage提供，能够在冻结价格下形成跨Cheap/Mid/Strong一致、可复算且与Router动作直接相关的成本单位。服务器租金受平台、空闲和运维影响，会引入与算法无关的噪声；图片Token分解缺失仍阻塞真实checkpoint。
+- **Alternatives considered**：字符数估算、Tokenizer离线估算、服务器租金或只用服务器时长；前两者不能形成正式多模态Token，后两者不能公平归因到单个Router动作。
 
 ## 决策6：重试记账
 

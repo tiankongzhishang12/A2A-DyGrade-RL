@@ -1,5 +1,19 @@
 # 快速开始：A2A-DyGrade-RL 实验流水线
 
+## V1.7 当前服务器执行入口
+
+V1.6 P1–P8本地准备已经完成。当前不要从本文件直接启动真实服务器实验；远程执行必须先阅读：
+
+1. `AGENTS.md`；
+2. `docs/design/server_handoff/remote-codex-handoff.md`；
+3. `specs/001-a2a-dygrade-rl/tasks.md` Phase 10；
+4. `docs/design/server_handoff/environment-lock.md`；
+5. `docs/design/server_handoff/checkpoint-runbook.md`。
+
+当前下一步是T113文档提交/远程同步和T113A最小10文件数据传输，不是直接启动GPU、vLLM或真实5 Item。统一远程路径为 `/root/autodl-tmp/a2a-dygrade/`；服务器租金不进入论文实验成本。
+
+---
+
 ## V1.6 自托管 Ministral 3 Pilot 本地准备（P1–P8）
 
 本阶段禁止真实模型调用、模型下载、依赖安装和服务器操作。全部命令在仓库根目录执行，运行产物使用唯一 `run_id`。

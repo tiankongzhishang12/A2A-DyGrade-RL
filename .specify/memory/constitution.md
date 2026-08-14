@@ -20,6 +20,8 @@ AGENTS.md
 - 必须严格划分 `train/dev/test`，防止 item、prompt、paper、统计信息和 cache 泄漏。
 - 测试集只允许用于最终评价，不得参与训练、调参、能力画像拟合或 replay buffer 构建。
 - 所有 baseline、消融版本和主方法必须共享相同 prepared data、paper budgets、Agent cache 和评价脚本。
+- 评分质量和严重错分风险是第一评价层；Token 成本、延迟、Agent Calls 和 A2A Exchanges 是第二评价层。
+- 资源下降不得补偿固定参考准入门或 `Quality Champion` 质量保护门失败；任何以评分质量下降换取资源下降的结果不得作为有效研究成果。
 - 必须先通过 fixture 或小样本 smoke workflow，再进入全量实验。
 
-**版本**：1.1.0 | **指向规则版本**：AGENTS.md 1.4.0 | **最后修订**：2026-07-06
+**版本**：1.2.0 | **指向规则版本**：AGENTS.md 1.5.0 | **最后修订**：2026-08-14

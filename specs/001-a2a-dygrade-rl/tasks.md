@@ -2,7 +2,7 @@
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
-**同步版本**：V1.4 最终职责分离、内部 Paper 重建、Quality Champion 质量保护、精简 Baseline，并继承 V1.3 正式质量协议（2026-07-29）
+**同步版本**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档契约已同步，V1.6 本地准备已完成；当前等待 T113 提交/远程同步，并继承 V1.4 Quality Champion 质量保护与正式质量协议
 
 **前置文档**：plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 
@@ -217,13 +217,13 @@
 ---
 
 
-## Phase 8：Dataset Semantic V2 数据整改与自托管多模态准备（优先级：P1，当前执行）
+## Phase 8：Dataset Semantic V2 数据整改与自托管多模态准备（优先级：P1，已完成）
 
 **目标**：在不下载模型、不调用API、不修改原始数据的前提下，生成语义正确、无Anchor、支持本地多模态模型且通过泄漏门禁的新 prepared data。
 
 ### 规格与测试先行
 
-- [X] T072 [US1] 更新 spec.md、plan.md、data-model.md、quickstart.md 与规格质量清单，冻结 Dataset Semantic V2 和模型无关 source asset 契约
+- [X] T072A [US1] 更新 spec.md、plan.md、data-model.md、quickstart.md 与规格质量清单，冻结 Dataset Semantic V2 和模型无关 source asset 契约
 - [X] T073 [P] [US1] 在 tests/unit/test_dataset_semantic_v2.py 中添加 ASAP-SAS DOCX/图片资源、Score1 Gold、Anchor 排除测试
 - [X] T074 [P] [US1] 在 tests/unit/test_dataset_semantic_v2.py 中添加 DREsS 三维 Gold、total 重建、空作文 quarantine、CASE 排除测试
 - [X] T075 [P] [US1] 在 tests/unit/test_dataset_semantic_v2.py 中添加 SAS-Bench whole-response、中英文来源对齐、manual_label/total 和隐藏 Step Gold 测试
@@ -345,7 +345,7 @@ T043/T043A/T043B/T044/T045/T045B/T045C（测试与契约先行）
 
 ---
 
-## Phase 9：V1.6 自托管 Ministral 3 Pilot 本地准备 P1–P8（优先级：P1，当前执行）
+## Phase 9：V1.6 自托管 Ministral 3 Pilot 本地准备 P1–P8（优先级：P1，已完成）
 
 **目标**：在不租服务器、不下载模型、不安装新依赖、不调用真实推理服务的前提下，完成自托管 Chat Completions 执行层、多模态资产、统一 Prompt/Schema、Token/成本/attempt 账本、固定5题 checkpoint、Fake workflow 和服务器交接材料。
 
@@ -395,3 +395,81 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 - T093、T094、T095、T096 可在契约冻结后并行编写测试。
 - T099 与 T097/T098 可并行；T100 依赖Schema和多模态接口，T101依赖客户端metadata契约。
 - T107 可在实现稳定后与T106的测试运行并行准备，但最终hash/commit字段必须在收敛后更新。
+---
+
+## Phase 10：AutoDL 服务器接管、远程 Codex 与真实 Ministral 3 Pilot（优先级：P1，当前执行）
+
+**目标**：在不改变 Dataset Semantic V2、无 Anchor、Gold、split、Paper、Prompt、Schema 和正式质量协议的前提下，将已冻结的自托管 Pilot 安全迁移到 AutoDL 数据盘；先完成远程 Codex 接手和 14B BF16 单模型 Smoke，再按门禁决定 3B/8B、真实 5 Item 和 30 Item。评分质量和严重错分风险始终优先，任何资源下降不得补偿质量失败。
+
+**当前状态快照（2026-08-14）**：AutoDL 服务器、远程仓库迁移和 14B BF16 权重下载/完整性校验已完成；GPU 当前关闭；远程 Codex、推理环境、14B 真实推理、3B/8B、真实 5 Item 和 30 Item 均未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
+
+**独立验收**：远程 Codex 能在 GPU 关闭时读取并遵守 `AGENTS.md` 与交接文件，远程仓库保持干净且提交/hash 可审计；14B 服务在批准的 `max_model_len=32768` 下完成身份、结构化输出、文本/视觉 Token、图片、显存和延迟 Smoke；只有 3B/8B/14B 均通过相同契约后才能执行固定 5 Item 共 15 条 canonical 调用；5 Item validator PASS 且用户批准后才允许执行 30 Item。任何质量门失败、语义退化、身份不符、usage 缺失、OOM 或费用越界都必须 fail closed。
+
+### S0：服务器、代码和14B权重实际完成记录
+
+- [X] T110 [US2] 在 AutoDL 实例核验 RTX 4090D 约48GB、约20核CPU、约90GB内存和数据盘容量，并将 GPU 关闭后的低资源状态与数据盘路径记录到 `docs/design/server_handoff/remote-codex-handoff.md`
+- [X] T111 [US2] 将完整 Git 仓库迁移到 `/root/autodl-tmp/a2a-dygrade/repo`，核验冻结执行提交 `44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`、远程 origin 和干净工作树，并在 `docs/design/server_handoff/remote-codex-handoff.md` 保留代码冻结说明
+- [X] T112 [US2] 将 `mistralai/Ministral-3-14B-Instruct-2512-BF16` revision `3cea74c1ebaf5ce5f5a2553de470e2ceab825142` 下载到 `/root/autodl-tmp/a2a-dygrade/models/ministral3/14b-bf16`，完成19/19必要文件、6/6权重分片、架构/BF16/索引和官方LFS SHA-256校验，并保存 `/root/autodl-tmp/a2a-dygrade/repo/outputs/runs/selfhosted_14b_download_20260813T082720Z/configs/model-14b-download-manifest.json`
+- [ ] T112A [US2] 按 `docs/design/server_handoff/artifact-return-manifest.md` Profile A 为现有14B下载run补齐全文件artifact SHA-256和下载验证摘要，回传本地相同 `run_id` 目录并生成 `artifact-return-receipt.json`；只回传manifest、日志和报告，不回传模型权重、缓存、虚拟环境或凭据，远程/本地hash不一致时禁止14B Smoke
+
+### S1：交接文档提交与远程Codex接管（不需要GPU）
+
+- [ ] T113 [US2] 更新并核对 `AGENTS.md`、`.specify/memory/constitution.md`、`specs/001-a2a-dygrade-rl/spec.md`、`plan.md`、`tasks.md`、`research.md`、`data-model.md`、`quickstart.md`、`checklists/requirements.md`、`docs/design/server_handoff/remote-codex-handoff.md` 及全部 server_handoff 契约；执行跨文档 analyze 和 diff 检查后提交并推送当前分支，再通过远程 Git 或 Git bundle 将同一提交同步到 `/root/autodl-tmp/a2a-dygrade/repo`，验证本地/远程 commit、文件 SHA-256 和 `dirty_worktree=false`
+- [ ] T113A [US2] 按 `docs/design/server_handoff/data-transfer-manifest.json` 将冻结 5 Item 所需 10 个最小文件传输到远程对应相对路径，生成 `outputs/runs/remote_data_transfer_<timestamp>/configs/data-transfer-receipt.json`；必须满足 expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0，未通过时禁止图片 Smoke 和真实 5 Item
+- [ ] T114 [US2] 在用户明确批准后，将远程 Codex CLI、`CODEX_HOME`、VS Code Server和必要运行日志规划到 `/root/autodl-tmp/a2a-dygrade/runtime/`；先测试直连，只有直连失败才配置仅监听 `127.0.0.1` 的 Mihomo 进程级代理，禁止把认证Token、SSH凭据或代理订阅写入仓库
+- [ ] T115 [US2] 使用唯一 `run_id=remote_codex_bootstrap_<timestamp>` 在 `outputs/runs/<run_id>/` 保存远程接手 Smoke：读取 `AGENTS.md` 和 `remote-codex-handoff.md`、报告 Git/磁盘/GPU/后台任务、运行只读 `git status`、执行批准路径的最小临时文件写入/撤销，并确认 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
+- [ ] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed
+
+### S2：14B推理环境与真实Smoke（需要GPU）
+
+- [ ] T116 [US2] 在已批准的14B Smoke范围内恢复GPU，在 `/root/autodl-tmp/a2a-dygrade/runtime/` 创建独立推理环境和缓存，安装并冻结 NVIDIA Driver/CUDA/Python/PyTorch/vLLM/Transformers/Processor版本，将配置快照和 `pip freeze` 或容器digest写入 `outputs/runs/selfhosted_14b_smoke_<timestamp>/configs/environment-lock.json`
+- [ ] T117 [US2] 以 `max_model_len=32768`、BF16、`temperature=0`、非Thinking和单模型常驻启动14B服务，运行模型身份、文本请求、统一JSON Schema、分数范围、DREsS三维和usage Smoke，并把服务日志、请求/响应、Token分解、显存峰值、首Token延迟和总延迟写入 `outputs/runs/selfhosted_14b_smoke_<timestamp>/`
+- [ ] T118 [US2] 使用冻结5 Item中实际引用的图像执行14B多模态Smoke，验证JPEG透传、TIFF无损PNG、source asset hash、模型可见Gold为0、文本/视觉Token分解和响应可解析性，并将失败attempt与canonical结果分别写入 `outputs/runs/selfhosted_14b_smoke_<timestamp>/logs/` 和 `predictions/`
+- [ ] T119 [US2] 为 `outputs/runs/selfhosted_14b_smoke_<timestamp>/` 生成 14B Smoke 审计报告，逐项判定身份、Schema、图片、usage、视觉 Token、显存、延迟、OOM 和 Token 预算门；任一阻塞项失败时保持 3B/8B、真实 5 Item 和 30 Item 调用数为 0
+- [ ] T119A [US2] 为 14B Smoke run 生成完整 artifact SHA-256 清单，将配置、服务/GPU 日志、请求/响应、usage、显存和 Smoke 报告回传本地相同 `run_id` 目录；本地验证 hash 与 Smoke 状态，不回传模型权重、缓存、虚拟环境或凭据
+
+### S3：3B/8B下载与同契约Smoke
+
+- [ ] T120 [US2] 仅在T119 PASS且用户批准后，为CheapAgent和MidAgent冻结3B/8B官方revision与下载manifest，将权重分别下载到 `/root/autodl-tmp/a2a-dygrade/models/ministral3/3b-bf16` 和 `/root/autodl-tmp/a2a-dygrade/models/ministral3/8b-bf16`，逐文件记录大小与SHA-256并保留至少20%数据盘余量
+- [ ] T120A [US2] 分别按 Profile A 为3B和8B下载run生成完整artifact SHA-256并回传本地相同 `run_id`，本地验证revision、文件清单、下载校验与receipt；两个模型任一下载产物未回传或hash不一致时不得进入对应Smoke
+- [ ] T121 [US2] 顺序加载3B和8B，复用14B完全相同的Prompt、Schema、生成参数、文本/图片Smoke和usage审计，在 `outputs/runs/selfhosted_3b_smoke_<timestamp>/` 与 `outputs/runs/selfhosted_8b_smoke_<timestamp>/` 保存环境、请求、响应、Token、显存、延迟和失败证据；禁止为某一Agent单独修改输入语义
+- [ ] T121A [US2] 为 3B 和 8B Smoke run 分别生成 artifact SHA-256 清单并回传本地相同 `run_id` 目录，本地验证模型身份、配置公平性、图片/usage、显存、延迟和 Smoke PASS；两个模型任一回传或复核失败时不得进入真实 5 Item
+
+### S4：真实5 Item Checkpoint与门禁
+
+- [ ] T122 [US2] 在3B/8B/14B Smoke全部PASS后，按 `docs/design/server_handoff/checkpoint-runbook.md` 使用同一唯一 `run_id` 顺序执行 CheapAgent、MidAgent、StrongAgent，对冻结1份5题Paper生成15条canonical成功记录；模型切换时使用 `--agents` 与 `--resume` 只补当前Agent缺失记录，失败attempt不得重复计入canonical成本
+- [ ] T123 [US2] 对真实 5 Item run 执行 `scripts/10_validate_selfhosted_checkpoint.py`，验证模型身份、15 条 canonical、三数据集、图像、Gold 隔离、DREsS 三维、SAS 完整回答、Token/价格、attempt 和 resume，并把 PASS/FAIL、API 等价 Token 成本与 retry Token overhead 写入 `outputs/runs/<run_id>/reports/`；FAIL 时 30 Item 调用数必须为 0
+- [ ] T123A [US2] 将真实 5 Item 完整 run 回传本地相同 `outputs/runs/<run_id>/`，核对远程/本地 artifact manifest，并在本地重新运行 `scripts/10_validate_selfhosted_checkpoint.py`；远程和本地结果一致后才提交用户审批
+- [ ] T123B [US2] 在真实 5 Item PASS 且用户批准后，确定性冻结 30 Item 输入并生成独立 `pilot30-data-transfer-manifest.json`，只传输 30 Item 所需输入、lineage、readiness 和实际引用图片；Dev/Test 与未批准全量 train 数据传输数必须为 0
+
+### S5：30 Item Pilot与进入Formal的决策门
+
+- [ ] T124 [US2] 只有T123 validator PASS且用户再次批准后，使用 `configs/experiments/selfhosted_ministral3_pilot30.yaml` 执行30 Item、Cheap/Mid/Strong共90条canonical调用，复用相同prepared data、Prompt、Schema、价格快照、预算、attempt和resume规则，并将全部产物写入唯一 `outputs/runs/<run_id>/`
+- [ ] T125 [US2] 基于 30 Item 结果输出各数据集有效完成数、Gold bin 数、expected disagreement 和 `qwk_readiness`；不满足正式 readiness 时，正式 dataset QWK 与 `Macro-QWK` 必须为 `NA`，探索性 QWK 必须标记 `exploratory_not_formal=true` 且不得进入质量门。30 Item 主要报告 `Macro-NMAE`、MAE、Within-1、Severe/Extreme Error、非法输出率、Unsafe Stop、Agent 分歧、Best-fixed、Item Oracle headroom、API 等价 Token 成本、延迟和失败恢复，并判断三档 Agent 是否具有非平凡互补性；在报告审阅前不得执行新的 100 Item Formal Pilot、Formal cache 或 1,000 Item 耐久性验证
+- [ ] T125A [US2] 将 30 Item 完整 run、输入 manifest、Agent cache、attempt 账本、Token 成本、失败记录、质量诊断和 QWK readiness 报告回传本地；生成 `artifact-return-receipt.json` 并验证全部 hash 和报告可重算性，回传完成前不得决定是否进入 Formal
+
+### Phase 10依赖顺序
+
+```text
+已完成：T110 → T111 → T112
+当前下一步：T113
+T113 → T113A → T112A → T114 → T115 → T115A
+T115A → T116 → T117 → T118 → T119 → T119A
+T119A PASS + 用户批准 → T120 → T120A → T121 → T121A
+T121A PASS → T122 → T123 → T123A
+T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
+```
+
+### Phase 10并行机会
+
+- T113 的本地文档 hash 核对与 Git 提交准备可以并行，但远程同步必须等待本地提交形成；T113A 必须等待远程仓库到达相同提交。
+- T116中环境版本记录和磁盘/显存监控脚本准备可并行；14B服务启动必须等待环境锁完成。
+- T117的文本Smoke与T118的图片资产预检查可以并行准备，但真实模型调用应顺序执行并复用同一冻结服务配置。
+- 3B与8B下载在磁盘、带宽和费用批准后可并行；各自Profile A回传与本地复核可并行，但T120A必须全部PASS后才能顺序加载单卡真实Smoke，避免同时常驻造成不公平资源条件。
+- T124 与 T125 不可并行；30 Item 完整产物落盘后才能分析能力互补性，T125A 回传和本地复算完成后才能判断 Formal 可行性。
+
+### Phase 10用户审阅门禁
+
+- 本次 V1.7 文档整改只实现并核对文档、manifest 和模板，不自动执行 T113 的 Git 提交/推送、远程同步或任何真实服务器操作。
+- T110–T112 按服务器实际完成证据标记为 `[X]`；T112A、T113–T125A 保持 `[ ]`，不得把文档已写、模型已下载或 Fake PASS 误报为下载产物回传、远程 Codex、真实 Smoke、数据传输、5 Item、30 Item或产物回传完成。
+- 用户已确认 V1.7 文档整改方案；文档验证通过后仍需用户单独指令才从 T113 开始提交、推送与远程同步。

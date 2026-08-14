@@ -1,98 +1,119 @@
 {
-    "destination_templates":  {
-                                  "checkpoint_prepare_run":  "/mnt/outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002",
-                                  "prepared_data":  "/mnt/data/semantic_v2"
-                              },
-    "excluded":  [
-                     "data/raw/",
-                     "data/processed/semantic_v2/items_dev.jsonl",
-                     "data/processed/semantic_v2/items_test.jsonl",
-                     "data/processed/semantic_v2/papers_dev.jsonl",
-                     "data/processed/semantic_v2/papers_test.jsonl",
-                     "all non-checkpoint train items/papers",
-                     "outputs/runs/\u003chistorical\u003e/ except the frozen checkpoint prepare run files listed here",
-                     ".venv/",
-                     "model weights",
-                     "credentials"
-                 ],
-    "file_count":  10,
-    "files":  [
-                  {
-                      "purpose":  "prepared_dataset_lineage_manifest",
-                      "relative_path":  "data/processed/semantic_v2/dataset_build_manifest.json",
-                      "sha256":  "a158fe817d1120a4c2788a5c883be66e5b7c3c6974bbe789f2f18d064eefdb6d",
-                      "size_bytes":  25990,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "source_asset_catalog",
-                      "relative_path":  "data/processed/semantic_v2/resource_manifest.json",
-                      "sha256":  "60c0f1c0f0afa57ca8d349964c5b6ac6b03f3ea69b1799cddd9d95011dfafef5",
-                      "size_bytes":  2050,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_source_asset",
-                      "relative_path":  "data/processed/semantic_v2/resources/asap_sas/assets/essay_set_03_image_01.jpeg",
-                      "sha256":  "fdccf7652eb4af116baf4991894caed711f4e0face95581ea9068fc22bc92141",
-                      "size_bytes":  144672,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "semantic_readiness_proof",
-                      "relative_path":  "data/processed/semantic_v2/semantic_readiness_manifest.json",
-                      "sha256":  "be2cffd67afc5c054a7079cb171fa3d75bafb683f40247b8f2f3bc3d525e9213",
-                      "size_bytes":  4837,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_selection_manifest",
-                      "relative_path":  "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/checkpoint_sample_manifest.csv",
-                      "sha256":  "e41b325c538eda2e359b1749d12ae65f296c1b10d8629b81036aafe4a3ad4d1a",
-                      "size_bytes":  857,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_scope_manifest",
-                      "relative_path":  "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/internal_item_split_manifest.checkpoint.csv",
-                      "sha256":  "78015c81881acb6150be81bb2a1d54cc1fe860a27e094cc2511d12d0b8b94c02",
-                      "size_bytes":  1654,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_frozen_manifest",
-                      "relative_path":  "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/selfhosted_checkpoint_manifest.json",
-                      "sha256":  "68e3ff2401e344ebcf8dbe65b83b0dd27a0eb5221092f7bae9f7f8d89ac2e021",
-                      "size_bytes":  3108,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_items",
-                      "relative_path":  "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/items_train_fit_checkpoint.jsonl",
-                      "sha256":  "699e82d5bf51c844a57d392641d19db92c5dc60f2314a3084b4ff5bf2d6da4e3",
-                      "size_bytes":  39971,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_paper",
-                      "relative_path":  "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/papers_train_fit_checkpoint.jsonl",
-                      "sha256":  "872aeed46d5cebbb743fa2bd0779f0b44904b33ac105777cbe1906d81a81a98d",
-                      "size_bytes":  839,
-                      "transfer_required":  true
-                  },
-                  {
-                      "purpose":  "checkpoint_preparation_audit",
-                      "relative_path":  "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/reports/checkpoint_preparation_audit.md",
-                      "sha256":  "8b583cfe33a646a9853a8ed1f235f6afc4242d731d67d58bf1173efaaba56a22",
-                      "size_bytes":  362,
-                      "transfer_required":  true
-                  }
-              ],
-    "schema_version":  "selfhosted_data_transfer_manifest_v2",
-    "scope":  "minimal_frozen_five_item_checkpoint_only",
-    "source_roots":  [
-                         "data/processed/semantic_v2",
-                         "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002"
-                     ],
-    "total_size_bytes":  224340
+  "destination_templates": {
+    "prepared_data": "/root/autodl-tmp/a2a-dygrade/repo/data/processed/semantic_v2",
+    "checkpoint_prepare_run": "/root/autodl-tmp/a2a-dygrade/repo/outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002"
+  },
+  "excluded": [
+    "data/raw/",
+    "data/processed/semantic_v2/items_dev.jsonl",
+    "data/processed/semantic_v2/items_test.jsonl",
+    "data/processed/semantic_v2/papers_dev.jsonl",
+    "data/processed/semantic_v2/papers_test.jsonl",
+    "all non-checkpoint train items/papers",
+    "outputs/runs/<historical>/ except the frozen checkpoint prepare run files listed here",
+    ".venv/",
+    "model weights",
+    "credentials"
+  ],
+  "file_count": 10,
+  "files": [
+    {
+      "purpose": "prepared_dataset_lineage_manifest",
+      "relative_path": "data/processed/semantic_v2/dataset_build_manifest.json",
+      "sha256": "a158fe817d1120a4c2788a5c883be66e5b7c3c6974bbe789f2f18d064eefdb6d",
+      "size_bytes": 25990,
+      "transfer_required": true
+    },
+    {
+      "purpose": "source_asset_catalog",
+      "relative_path": "data/processed/semantic_v2/resource_manifest.json",
+      "sha256": "60c0f1c0f0afa57ca8d349964c5b6ac6b03f3ea69b1799cddd9d95011dfafef5",
+      "size_bytes": 2050,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_source_asset",
+      "relative_path": "data/processed/semantic_v2/resources/asap_sas/assets/essay_set_03_image_01.jpeg",
+      "sha256": "fdccf7652eb4af116baf4991894caed711f4e0face95581ea9068fc22bc92141",
+      "size_bytes": 144672,
+      "transfer_required": true
+    },
+    {
+      "purpose": "semantic_readiness_proof",
+      "relative_path": "data/processed/semantic_v2/semantic_readiness_manifest.json",
+      "sha256": "be2cffd67afc5c054a7079cb171fa3d75bafb683f40247b8f2f3bc3d525e9213",
+      "size_bytes": 4837,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_selection_manifest",
+      "relative_path": "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/checkpoint_sample_manifest.csv",
+      "sha256": "e41b325c538eda2e359b1749d12ae65f296c1b10d8629b81036aafe4a3ad4d1a",
+      "size_bytes": 857,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_scope_manifest",
+      "relative_path": "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/internal_item_split_manifest.checkpoint.csv",
+      "sha256": "78015c81881acb6150be81bb2a1d54cc1fe860a27e094cc2511d12d0b8b94c02",
+      "size_bytes": 1654,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_frozen_manifest",
+      "relative_path": "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/configs/selfhosted_checkpoint_manifest.json",
+      "sha256": "68e3ff2401e344ebcf8dbe65b83b0dd27a0eb5221092f7bae9f7f8d89ac2e021",
+      "size_bytes": 3108,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_items",
+      "relative_path": "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/items_train_fit_checkpoint.jsonl",
+      "sha256": "699e82d5bf51c844a57d392641d19db92c5dc60f2314a3084b4ff5bf2d6da4e3",
+      "size_bytes": 39971,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_paper",
+      "relative_path": "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/predictions/checkpoint_inputs/papers_train_fit_checkpoint.jsonl",
+      "sha256": "872aeed46d5cebbb743fa2bd0779f0b44904b33ac105777cbe1906d81a81a98d",
+      "size_bytes": 839,
+      "transfer_required": true
+    },
+    {
+      "purpose": "checkpoint_preparation_audit",
+      "relative_path": "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002/reports/checkpoint_preparation_audit.md",
+      "sha256": "8b583cfe33a646a9853a8ed1f235f6afc4242d731d67d58bf1173efaaba56a22",
+      "size_bytes": 362,
+      "transfer_required": true
+    }
+  ],
+  "schema_version": "selfhosted_data_transfer_manifest_v3",
+  "scope": "minimal_frozen_five_item_checkpoint_only",
+  "source_roots": [
+    "data/processed/semantic_v2",
+    "outputs/runs/real_pilot_selfhosted_checkpoint_prepare_20260812_002"
+  ],
+  "total_size_bytes": 224340,
+  "transfer_stage": "pre_model_smoke_and_real_five_item",
+  "destination_repo_root": "/root/autodl-tmp/a2a-dygrade/repo",
+  "expected_file_count": 10,
+  "requires_remote_receipt": true,
+  "receipt_schema": "remote_data_transfer_receipt_v1",
+  "receipt_required_fields": {
+    "expected_file_count": 10,
+    "received_file_count": 10,
+    "hash_mismatch_count": 0,
+    "dev_test_file_count": 0,
+    "non_checkpoint_train_file_count": 0,
+    "status": "PASS"
+  },
+  "forbidden_scopes": [
+    "dev",
+    "test",
+    "non_checkpoint_train",
+    "credentials",
+    "model_weights",
+    "virtual_environments"
+  ]
 }

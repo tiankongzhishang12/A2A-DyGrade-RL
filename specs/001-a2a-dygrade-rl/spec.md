@@ -2,8 +2,8 @@
 
 **功能分支**：`001-a2a-dygrade-rl`
 **创建日期**：2026-07-04
-**最后修订**：2026-08-12
-**状态**：V1.6 自托管 Ministral 3 Pilot 本地准备执行中；Dataset Semantic V2 已完成且 Semantic Readiness/internal audit 均为 PASS；P1–P8 仅允许本地开发、Mock/Fixture 测试与服务器交接准备，不下载模型、不安装新依赖、不调用真实推理服务
+**最后修订**：2026-08-14
+**状态**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档收敛中；V1.6 本地准备 P1–P8 已完成，Dataset Semantic V2 与 internal audit 均为 PASS；AutoDL 服务器、远程仓库迁移和 14B BF16 下载/完整性校验已完成，GPU 当前关闭；远程 Codex、最小数据传输、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item 和 30 Item 均未完成
 **输入**：用户确认主研究对象是固定 Agent 环境中的动态路由增益，而不是先把基础阅卷器做到生产级准确率；DREsS 主实验采用无 Anchor 的 Content、Organization、Language 三维评分；ASAP-SAS 必须恢复官方 Prompt/Rubric 并使用 Score1 作为最终 Gold；SAS-Bench 必须从 Step Item 改为完整学生回答 Item；旧 100 Item Pilot 只保留为 cliproxy、模型身份、结构化输出、Token 与成本链路的工程证据，不得作为正式论文评分结果或 Formal cache。
 
 ---
@@ -334,13 +334,17 @@ max_a2a_exchanges
 - **FR-079**：模型可见 HTTP 请求体必须通过显式白名单构建，递归出现 Gold、隐藏 Trait、Score1/Score2、manual label、Step label/error、raw/derived total 或等价键的次数必须为0；本地 Mock 必须捕获并审计实际序列化 body，而不是只审计内存中的 Item。
 - **FR-080**：自托管评分输出必须支持通用分数、置信度、理由和证据；DREsS 必须额外返回 Content、Organization、Language 三维分数，三维均在0–5且总分与三维和一致；非 DREsS 的 trait scores 必须为空。
 - **FR-081**：Token 账本必须优先采用推理服务实际返回的 `prompt_tokens`、`completion_tokens` 和 `total_tokens`；三者缺失、为负或不自洽时请求失败。多模态 Item 在正式 checkpoint 中还必须具有服务器/Processor 提供的文本与视觉 Token 分解，否则门禁失败，不得用字符数估算冒充正式 Token。
-- **FR-082**：每次成功调用必须同时记录 `official_api_equivalent_token_cost` 和可选的 `actual_server_allocated_cost`。前者按冻结的 Mistral 官方输入/输出百万 Token 价格计算，后者仅在服务器小时价与分摊时长均可审计时计算；二者不得混称 Actual API Bill。
-- **FR-083**：每个 `Item × Agent` 必须具有稳定 `logical_call_id`。正式 canonical cost 只统计一条最终成功调用；每次 HTTP 尝试必须产生独立 attempt audit，失败重试、超时、OOM 和服务重启的Token成本与可审计服务器时长成本分别进入 `operational_retry_overhead` 和 `operational_retry_server_overhead`，不得重复计入 canonical experiment cost；进程重启必须从attempt账本恢复已发生调用数与成本。
+- **FR-082**：每次成功调用必须记录 `official_api_equivalent_token_cost`。该指标按冻结的 Mistral 输入/输出 Token 价格计算，是 Router 预算与跨 Agent 公平比较的唯一主成本，不是实际 API 账单。AutoDL 服务器租金、GPU 空闲、模型下载、模型加载、环境安装和人工等待不属于论文实验成本，不进入 Router、Baseline、Cost-QWK、Pareto Frontier 或论文结果表格；本实验的 `server_hourly_price_usd` 与 `actual_server_allocated_cost_usd` 保持为 `null`。
+- **FR-083**：每个 `Item × Agent` 必须具有稳定 `logical_call_id`。正式 canonical cost 只统计一条最终成功调用；每次 HTTP 尝试必须产生独立 attempt audit，失败重试、超时、OOM 和服务重启产生的额外 Token 成本进入 `operational_retry_overhead`，不得重复计入 canonical experiment cost；进程重启必须从 attempt 账本恢复已发生调用数与 Token 成本。服务器成本相关兼容字段在本实验中必须保持 `null`，不得生成或累计 `operational_retry_server_overhead`。
 - **FR-084**：本地必须确定性生成一份5题 checkpoint：来自 `train_fit` 的一份 strict Paper，恰含5个唯一 Item，覆盖 ASAP-SAS、DREsS、SAS-Bench，且至少一个 ASAP-SAS Item 带必要图片；样本选择不得读取 Gold，清单生成后按源文件 hash、种子和选择规则冻结。
 - **FR-085**：真实 checkpoint 只允许 Cheap/Mid/Strong，共15个 canonical 调用；Evidence/Arbitrator、Dev/Test、30/100/1000 Item 入口在 checkpoint PASS 前必须为0。门禁至少检查身份、结构、范围、DREsS三维和、SAS whole-response、图片审计、Gold隔离、Token、成本、attempt/canonical唯一性和 resume 幂等性。
 - **FR-086**：本地必须提供无需真实模型的 Fake OpenAI-compatible 服务或可注入 transport，覆盖正常、JPEG/TIFF图片、非JSON、模型替换、usage缺失/不自洽、分数/trait非法、HTTP可重试/不可重试、断点恢复、跨进程预算恢复、单模型分阶段合并和预算硬门；Mock 输出只能标记 `formal_eligible=false`，不得进入能力画像、Router、Baseline或论文结果。
 - **FR-087**：服务器交接材料必须冻结代码提交、数据传输 manifest、模型审批项、环境与磁盘路径、费用/时长/调用上限、部署命令模板、5 Item runbook 和返回产物清单；不得包含密钥、模型权重、本地虚拟环境或未批准下载命令的实际执行。
 - **FR-088**：P1–P8 完成前必须运行新增单元/集成测试、完整测试套件、仓库结构检查、规格—计划—任务一致性分析、实现后 verify、任务真实性检查和代码/测试/错误处理审查；发现高风险缺口必须修复后重跑，不得仅以测试“没有失败”代替逐项验收。
+- **FR-089**：真实模型 Smoke 和 5 Item 前，必须按冻结的 `data-transfer-manifest.json` 将恰好 10 个最小 Semantic V2/checkpoint 文件传输到远程服务器，逐文件验证 size 与 SHA-256；Dev/Test 和非 checkpoint train 文件传输数必须为 0。
+- **FR-090**：真实模型调用前必须冻结 canonical 调用数、最大 attempt 数、并发、超时、`max_model_len`、输出上限、`temperature` 和 Thinking 模式；超出任一硬门时必须 fail closed。该预算不包含服务器租金。
+- **FR-091**：每个真实 download、per-model Smoke、5 Item 和 30 Item run 都必须生成全文件 SHA-256 清单并回传本地相同 `run_id` 目录；本地必须重新验证 hash 和可重算报告。模型权重、下载缓存、虚拟环境和认证凭据不得回传。
+- **FR-092**：30 Item Pilot 必须输出每个数据集的 QWK readiness。若任一数据集不满足正式 QWK 最小样本、Gold bin 或 expected disagreement 条件，正式 dataset QWK 与 `Macro-QWK` 必须为 `NA`；探索性 QWK 必须标记 `exploratory_not_formal=true`，不得进入正式质量门或 Formal 解锁结论。
 
 
 ## 6. 关键实体
@@ -424,6 +428,10 @@ max_a2a_exchanges
 - **SC-044**：本地checkpoint workflow在Fake服务上完成15条成功canonical记录，resume再次执行产生的新HTTP请求数为0；失败attempt保留但canonical成本不重复累计。
 - **SC-045**：服务器交接包包含模型/环境/数据/费用/runbook/返回产物六类材料且不含密钥、权重、C盘实验路径或实际服务器操作；P1–P8完成报告逐项给出证据路径与测试命令。
 - **SC-046**：新增测试与全仓测试全部通过，spec/plan/tasks中的V1.6要求都有已完成任务和实现证据，任务真实性、verify和专项review不存在未解决的CRITICAL/HIGH问题。
+- **SC-047**：远程数据接收 manifest 显示 `expected_file_count=10`、`received_file_count=10`、`hash_mismatch_count=0`、`dev_test_file_count=0` 和 `non_checkpoint_train_file_count=0`。
+- **SC-048**：真实配置中的 `server_hourly_price_usd=null`；论文主成本 100% 由冻结 Token 价格和服务端 usage 重算，服务器租金不进入正式报告。
+- **SC-049**：远程与本地 run 的 artifact hash 完全一致，本地重新运行 validator 得到与远程相同的 PASS/FAIL。
+- **SC-050**：30 Item 不满足正式 QWK readiness 时，`formal_macro_qwk=NA` 且 `exploratory_not_formal=true`。
 
 
 ## 8. 非目标

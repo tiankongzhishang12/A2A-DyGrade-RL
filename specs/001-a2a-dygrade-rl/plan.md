@@ -1,9 +1,61 @@
 # 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
 
 **分支**：`001-a2a-dygrade-rl`
-**日期**：2026-08-11
+**日期**：2026-08-14
 **规格**：[spec.md](./spec.md)
-**依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.3、`AGENTS.md` 1.4.0
+**依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.3、`AGENTS.md` 1.5.0
+
+---
+
+## V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot
+
+本修订覆盖 V1.6 本地准备阶段的“未租服务器、未下载模型”状态，但不删除其历史证据。当前阶段只改变服务器执行、远程开发控制、模型运行和产物回传方式，不改变 Dataset Semantic V2、无 Anchor、Gold、split、Paper、Prompt、Schema、质量协议或 Test 隔离。
+
+### 当前真实状态
+
+- 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载、19/19 必要文件与 6/6 权重分片完整性检查、架构/BF16/索引和官方 LFS SHA-256 校验。
+- 当前资源：GPU 关闭；低资源保留状态约 0.5 CPU / 2 GB RAM；GPU 实例启动后为 RTX 4090D 约 48 GB、约 20 CPU、约 90 GB RAM。
+- 当前未完成：最新文档提交与远程同步、10 文件最小数据传输、现有14B下载run的Profile A回传、本地复核、远程 Codex 接手、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item、30 Item。
+- 当前 Semantic V2：总 Item 29,451；train 20,637、dev 2,897、test 5,917；Paper 3,921；Paper 使用 Item 19,605；external leftover 9,846；quarantine 506。
+
+### 质量与成本原则
+
+评分质量和严重错分风险是第一评价层；Official API-Equivalent Token Cost、Elapsed Time、Agent Calls 和 A2A Exchanges 是第二评价层。资源下降不能补偿质量门失败。服务器租金、GPU 空闲、模型下载、模型加载、环境安装与远程 Codex 操作不属于论文成本；真实配置保持 `server_hourly_price_usd: null`。
+
+### 统一远程目录
+
+```text
+project_root: /root/autodl-tmp/a2a-dygrade
+repo_root: /root/autodl-tmp/a2a-dygrade/repo
+model_root: /root/autodl-tmp/a2a-dygrade/models/ministral3
+runtime_root: /root/autodl-tmp/a2a-dygrade/runtime
+prepared_root: /root/autodl-tmp/a2a-dygrade/repo/data/processed/semantic_v2
+output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
+```
+
+### 服务器实施链
+
+```text
+文档提交与远程同步
+→ 5 Item 最小数据传输与 Hash 核验
+→ 远程 Codex 接手（不需要 GPU）
+→ Token 价格与调用预算冻结
+→ 14B 环境、文本与多模态 Smoke
+→ 14B 产物回传与本地复核
+→ 3B/8B 下载、Smoke 与产物回传
+→ 真实 5 Item、远程 validator、回传和本地重算
+→ 用户批准后构建 30 Item 专用传输包
+→ 30 Item Pilot、QWK readiness 与诊断报告
+→ 回传、本地复算与 Formal 决策
+```
+
+### 远程 Codex 控制面
+
+远程 Codex 只是服务器开发与操作工具，不属于论文算法，不进入实验成本，也不需要 GPU。它必须先读取 `AGENTS.md` 和 `remote-codex-handoff.md`，默认只在仓库和批准的数据盘路径内工作。网络先测试直连，只有直连失败才允许配置仅监听 `127.0.0.1` 的进程级 Mihomo；代理不得注入正式推理进程或改变延迟测量。
+
+### 分阶段产物
+
+远程执行采用四类可审计 Profile：Model Download、Per-Model Smoke、Real 5 Item、30 Item Pilot。每个 Profile 都必须生成 `run_manifest`、环境/模型/输入/Prompt/Token 价格快照、日志、报告和全文件 SHA-256，回传本地相同 `run_id` 后重新验证。
 
 ---
 
@@ -26,6 +78,7 @@
 |---|---|
 | 简体中文优先 | spec/plan/tasks、runbook、审计与测试说明使用简体中文 |
 | 论文实验成果优先 | 只建设离线Agent cache执行与可审计成本链路，不建设Web平台 |
+| 评分质量优先 | 先执行固定参考准入与 Quality Champion 保护；资源下降不得补偿质量失败 |
 | 可复现优先 | 模型/Prompt/Schema/数据/价格/选择规则均以hash和manifest冻结 |
 | 数据完整性 | 只读取Semantic V2 train_fit；序列化HTTP body递归Gold隔离；prepared data只读 |
 | 公平评价 | 三档模型共享Prompt、Schema、生成参数、图片策略和同一5题样本 |
@@ -198,7 +251,9 @@ external train Item scope
 
 V1.3 的 Gate Error、Severe/Extreme、Unsafe Stop、Macro-NMAE、固定11档 Macro-QWK、QWK readiness 和 Paper 级配对 Bootstrap 保持不变；Dev 选择改为“固定参考准入门 -> Quality Champion 质量保护门 -> 资源词典序”。
 
-## 2. 当前执行状态
+## 2. V1.4 历史执行状态（已被 V1.7 当前状态覆盖）
+
+> 本节保留旧 prepared data、旧 Paper 范围和 V1.4 实现过程的历史证据，不代表当前 Dataset Semantic V2 数据量或当前服务器阶段。当前状态统一以本文件顶部 V1.7、`tasks.md` Phase 10 和 `remote-codex-handoff.md` 为准。
 
 ### 2.1 已完成
 
@@ -1211,13 +1266,17 @@ CLI 只做流程编排，业务逻辑留在 `src/`。具体任务见 `tasks.md`�
 
 ## 22. 下一步
 
-依据 `tasks.md`，实现顺序固定为：
+依据 `tasks.md` Phase 10，当前执行顺序固定为：
 
-1. V1.4 internal component split、两个 strict Paper rebuild 和 audit；
-2. internal manifests/schema/config 与 fixture tests；
-3. V1.3 quality protocol、QWK readiness、paired Bootstrap；
-4. train_fit-only 参数/轨迹边界与 calibration no-gradient/no-ranking 门禁；
-5. per-checkpoint STOP calibration、Calibration Package，以及 Dev 的固定参考准入、Quality Champion 保护与资源 selector smoke；
-6. 向用户提交基于重建 train_fit Paper 的真实 Agent Pilot 模型、费用、support catalog 和依赖审批方案。
+1. 收敛 constitution/spec/plan/tasks 与全部 server_handoff 文档；
+2. 提交并推送，经 Git 或 Git bundle 同步远程仓库；
+3. 传输冻结 5 Item 所需 10 个最小文件并完成远程 SHA-256 接收审计，同时回传并本地复核现有14B下载Profile A；
+4. 配置远程 Codex 并完成不使用 GPU 的接手 Smoke；
+5. 冻结 Token 价格、canonical/attempt/并发/上下文/输出等调用预算，服务器租金不进入论文指标；
+6. 恢复 GPU，执行 14B 环境锁、文本和多模态 Smoke，回传本地复核；
+7. 14B PASS 且用户批准后再下载和验证 3B/8B；
+8. 三模型 Smoke PASS 后执行真实 5 Item，回传并在本地重算 validator；
+9. 用户批准后构建 30 Item 专用传输包并执行 Pilot；
+10. 输出 QWK readiness、质量/互补性/Token/延迟诊断，回传本地后决定是否进入 Formal。
 
-完整 Fixture Smoke 已实现、审核并通过；下一步只准备 T052A 的真实 Agent Pilot 候选配置和审批材料，不联网、不下载依赖、不调用真实模型，直到用户单独批准。
+任何阶段失败都不得通过放宽质量门、增加未批准数据、重复计算 canonical 成本或跳过产物回传来继续推进。
