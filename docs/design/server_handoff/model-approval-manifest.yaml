@@ -30,8 +30,16 @@ server:
 approvals:
   server_provisioning: approved_and_completed
   strong_model_download: approved_and_completed
-  strong_environment_install: approved_not_started
-  strong_real_smoke: approved_not_started
+  strong_environment_install:
+    scope_approval: approved
+    prerequisite_gate: blocked_by_T112A_T115A
+    gpu_resume_approval: required
+    execution_status: locked
+  strong_real_smoke:
+    scope_approval: approved
+    prerequisite_gate: blocked_by_T112A_T115A
+    gpu_resume_approval: required
+    execution_status: locked
   cheap_mid_model_download: pending_user_approval
   real_five_item: pending_user_approval_after_all_model_smokes
   real_thirty_item: pending_user_approval_after_five_item_pass
@@ -80,8 +88,10 @@ server_execution_counters:
   remote_codex_installs: 1
   remote_codex_account_profiles_configured: 2
   remote_codex_operational_task_runs: 3
-  remote_codex_observed_model_turns: 8
-  remote_codex_cli_account_switch_tasks: 2
-  remote_codex_desktop_smoke_tasks: 1
+  remote_codex_account_switch_task_runs: 2
+  remote_codex_account_switch_token_count_events: 2
+  remote_codex_desktop_smoke_task_runs: 1
+  remote_codex_desktop_token_count_events: 6
+  remote_codex_total_token_count_events: 8
   paper_experiment_model_calls: 0
   gpu_inference_calls: 0

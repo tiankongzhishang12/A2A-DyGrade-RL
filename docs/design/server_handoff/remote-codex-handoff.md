@@ -164,7 +164,7 @@ Mihomo：127.0.0.1:7890，allow-lan=false，仅注入Codex子进程
 后端状态：PASS
 桌面Connection UI：PASS
 桌面只读Smoke：PASS
-桌面会话：01a01069-d270-7f81-9c98-c0199e79a6e6（originator=Codex Desktop）
+桌面会话：01a01069-d270-7f81-9c98-c0199e79a6e6（originator=Codex Desktop；source=vscode为内部枚举，不代表VS Code Remote-SSH）
 ```
 
 远程后端验收 run 为：

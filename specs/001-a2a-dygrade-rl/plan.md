@@ -39,9 +39,9 @@ output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
 文档提交与远程同步
 → 5 Item 最小数据传输与 Hash 核验
 → 远程 Codex 接手（不需要 GPU）
-→ Token 价格与调用预算冻结
-→ 14B 环境、文本与多模态 Smoke
-→ 14B 产物回传与本地复核
+→ 14B Download Profile A 产物回传与本地复核 + Token价格/调用预算复核（不需要GPU，可并行）
+→ 经用户批准恢复GPU，执行14B环境、文本与多模态 Smoke
+→ 14B Smoke Profile B 产物回传与本地复核
 → 3B/8B 下载、Smoke 与产物回传
 → 真实 5 Item、远程 validator、回传和本地重算
 → 用户批准后构建 30 Item 专用传输包
@@ -1272,15 +1272,14 @@ CLI 只做流程编排，业务逻辑留在 `src/`。具体任务见 `tasks.md`�
 
 依据 `tasks.md` Phase 10，当前执行顺序固定为：
 
-1. 收敛 constitution/spec/plan/tasks 与全部 server_handoff 文档；
-2. 提交并推送，经 Git 或 Git bundle 同步远程仓库；
-3. 传输冻结 5 Item 所需 10 个最小文件并完成远程 SHA-256 接收审计，同时回传并本地复核现有14B下载Profile A；
-4. 配置远程 Codex 并完成不使用 GPU 的接手 Smoke；
-5. 冻结 Token 价格、canonical/attempt/并发/上下文/输出等调用预算，服务器租金不进入论文指标；
-6. 恢复 GPU，执行 14B 环境锁、文本和多模态 Smoke，回传本地复核；
-7. 14B PASS 且用户批准后再下载和验证 3B/8B；
-8. 三模型 Smoke PASS 后执行真实 5 Item，回传并在本地重算 validator；
-9. 用户批准后构建 30 Item 专用传输包并执行 Pilot；
-10. 输出 QWK readiness、质量/互补性/Token/延迟诊断，回传本地后决定是否进入 Formal。
+1. 方案A Official SSH Remote控制面已经完成，继续保持GPU关闭；
+2. 执行T112A：将现有14B Download Profile A的脱敏manifest、日志和报告回传本地并完成hash复核，不回传模型权重；
+3. 与T112A并行执行T115A：复核Token价格、canonical/attempt/并发/上下文/输出等调用预算，服务器租金不进入论文指标；
+4. 仅在T112A与T115A均PASS且用户再次批准后恢复GPU；
+5. 执行14B环境锁、文本和多模态Smoke，并按Smoke Profile B回传本地复核；
+6. 14B远程/本地Smoke PASS且用户批准后再下载和验证3B/8B；
+7. 三模型Smoke PASS后执行真实5 Item，回传并在本地重算validator；
+8. 用户批准后构建30 Item专用传输包并执行Pilot；
+9. 输出QWK readiness、质量/互补性/Token/延迟诊断，回传本地后决定是否进入Formal。
 
 任何阶段失败都不得通过放宽质量门、增加未批准数据、重复计算 canonical 成本或跳过产物回传来继续推进。
