@@ -7,21 +7,20 @@
 - V1.6本地准备P1–P8、AutoDL服务器、远程Git仓库、14B BF16下载与完整性检查均已完成。
 - 冻结5 Item的10个最小文件已传输并通过hash receipt；Dev/Test和非checkpoint train传输数均为0。
 - 远程Codex CLI、共享`CODEX_HOME`、两个ChatGPT账号手动切换、进程级Mihomo、App Server和跨账号同一Thread续接Smoke已完成。
-- 本机Codex官方SSH Connection UI及其只读Smoke仍为`PENDING_USER_UI`。
+- 本机Codex官方SSH Connection UI及其只读Smoke已通过；远程会话`01a01069-d270-7f81-9c98-c0199e79a6e6`由`Codex Desktop`创建并验证远程路径、Git、账号、GPU和治理原则。
 - 14B下载Profile A回传、本地复核、推理环境和真实14B Smoke尚未执行；GPU当前关闭。
 - 3B/8B、真实5 Item、30 Item和Formal均未解锁。
 - 评分质量优先，资源不可补偿质量失败；论文主成本只使用Official API-Equivalent Token Cost，服务器租金不进入实验指标。
 
 ## 当前执行顺序
 
-1. 在本机Codex桌面端注册`autodl-a2a`官方SSH Connection，并完成无GPU只读Smoke；
-2. 将现有14B下载run按Profile A回传本地并完成hash复核；
-3. 复核Token价格和调用预算冻结状态；
-4. 经用户批准恢复GPU，执行14B环境、文本和多模态Smoke并回传本地；
-5. 14B PASS且用户批准后下载和验证3B/8B；
-6. 三模型Smoke均PASS后执行真实5 Item并回传本地重算；
-7. 用户批准后构建30 Item专用传输包；
-8. 执行30 Item、回传和诊断，再决定是否进入Formal。
+1. 将现有14B下载run按Profile A回传本地并完成hash复核；
+2. 复核Token价格和调用预算冻结状态；
+3. 经用户批准恢复GPU，执行14B环境、文本和多模态Smoke并回传本地；
+4. 14B PASS且用户批准后下载和验证3B/8B；
+5. 三模型Smoke均PASS后执行真实5 Item并回传本地重算；
+6. 用户批准后构建30 Item专用传输包；
+7. 执行30 Item、回传和诊断，再决定是否进入Formal。
 
 ## 文件索引
 

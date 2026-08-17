@@ -162,8 +162,9 @@ SSH Host别名：autodl-a2a
 账号配置：account-a、account-b；最终活动账号 account-a
 Mihomo：127.0.0.1:7890，allow-lan=false，仅注入Codex子进程
 后端状态：PASS
-桌面Connection UI：PENDING_USER_UI
-桌面只读Smoke：PENDING_USER_UI
+桌面Connection UI：PASS
+桌面只读Smoke：PASS
+桌面会话：01a01069-d270-7f81-9c98-c0199e79a6e6（originator=Codex Desktop）
 ```
 
 远程后端验收 run 为：
@@ -172,7 +173,7 @@ Mihomo：127.0.0.1:7890，allow-lan=false，仅注入Codex子进程
 outputs/runs/official_ssh_remote_20260817T091500Z/
 ```
 
-已验证专用 SSH key 免密连接、新登录 Shell 的 Codex PATH、ChatGPT 登录、Mihomo 连通性、App Server、干净 Git 工作树、GPU 关闭、两个账号凭据不同以及共享会话状态不变。账号 B 已通过 `codex exec resume` 续接账号 A 创建的同一 Thread，并复述相同标记。该 Smoke 使用 2 次远程 Codex 操作性模型调用，但论文实验模型调用、论文 Token 成本与 GPU 调用均为 0。
+已验证专用 SSH key 免密连接、新登录 Shell 的 Codex PATH、ChatGPT 登录、Mihomo 连通性、App Server、干净 Git 工作树、GPU 关闭、两个账号凭据不同以及共享会话状态不变。账号 B 已通过 `codex exec resume` 续接账号 A 创建的同一 Thread，并复述相同标记。随后从本机 Codex 官方 SSH Connection 创建桌面会话，验证 `originator=Codex Desktop`、远程 cwd/hostname/HEAD、clean tree、`account-a`、GPU关闭、治理原则理解与锁定阶段。合计3个操作性任务、8个可观察 `token_count` 事件；它们均不属于论文实验，论文实验模型调用、论文 Token 成本与 GPU 调用仍为0。
 
 账号切换只能由用户显式执行：
 
@@ -238,7 +239,7 @@ approved_runtime_max_model_len: 32768
 - 14B BF16模型已下载并完成文件、权重索引、架构、精度和SHA-256检查；
 - 冻结 5 Item 所需 10 个最小文件已传输，receipt 为 10/10、hash mismatch 0、Dev/Test 0；
 - 远程 Codex CLI、共享 `CODEX_HOME`、两个账号保险库、手动切换器和进程级 Mihomo 已配置；
-- 远程 bootstrap Smoke、App Server Smoke 与跨账号同一 Thread 续接 Smoke 已通过；
+- 远程 bootstrap Smoke、App Server Smoke、跨账号同一 Thread 续接 Smoke、本机官方 SSH Connection 注册与桌面只读 Smoke 已通过；
 - GPU保持关闭，当前没有执行真实14B推理、真实5 Item或30 Item。
 
 权威本地准备 run 包括：
@@ -251,7 +252,6 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 ## 9. 当前尚未完成内容
 
-- 本机 Codex 桌面端尚未在 `Settings → Connections → SSH` 注册 `autodl-a2a`，官方 SSH Remote 的 UI 只读 Smoke 仍需用户完成；
 - 现有14B下载run尚未执行T112A Profile A回传和本地hash复核；
 - Token价格与真实调用预算尚未完成 T115A 冻结；
 - 远程推理虚拟环境及 vLLM/依赖尚未形成最终环境锁；
@@ -269,15 +269,15 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 当前立即目标按任务门禁顺序执行：
 
-### 阶段 A：完成本机 Codex 官方 SSH Remote UI Smoke（不需要GPU）
+### 阶段 A：方案 A Official SSH Remote 控制面（已完成）
 
-1. 在本机 Codex 桌面端打开 `Settings → Connections → SSH → Add`；
-2. 添加已有 SSH Host 别名 `autodl-a2a`，远程目录选择 `/root/autodl-tmp/a2a-dygrade/repo`；
-3. 从该 Connection 新建远程任务，只执行 `pwd`、`hostname`、Git branch/HEAD/status、读取 `AGENTS.md` 和本文件、确认 GPU 关闭；
-4. 将结果补入 `official_ssh_remote_20260817T091500Z`，把两个 `PENDING_USER_UI` 检查改为 PASS；
-5. 不安装依赖、不打开 GPU、不启动模型服务、不进行论文实验调用。
+1. 本机 Codex 已注册 `remote-ssh-discovered:autodl-a2a`；
+2. 桌面会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 从该 Connection 进入 `/root/autodl-tmp/a2a-dygrade/repo`；
+3. cwd、hostname、Git branch/HEAD/status、`account-a`、GPU关闭、治理文件理解和锁定阶段均验证通过；
+4. 未修改文件、未安装依赖、未下载/启动模型、未产生论文实验调用；
+5. 验收证据位于 `official_ssh_remote_20260817T091500Z`。
 
-### 阶段 B：完成下载产物回传与预算冻结（不需要GPU）
+### 阶段 B：完成下载产物回传与预算复核（不需要GPU）
 
 1. T112A将现有14B下载run按Profile A回传本地并完成hash复核，不回传模型权重；
 2. T115A冻结 Token 价格、canonical 调用数、attempt、并发、超时、上下文和输出上限；
@@ -318,7 +318,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | V1.7文档提交与远程同步 | PASS | `workspace_handoff_commit=f1d08f2e539d0498acf030128a6343886246e9eb` 已推送并 fast-forward 同步到AutoDL，提交、文件hash和 clean tree 均通过；后续 metadata-only 状态提交允许晚于该commit |
 | 5 Item最小数据传输 | PASS | `remote_data_transfer_20260815T044106Z` receipt：10/10、hash mismatch=0、Dev/Test=0 |
 | 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
-| 本机Codex官方SSH Remote UI | PENDING_USER_UI | 注册 `autodl-a2a` 并从桌面 Connection 完成只读 Smoke |
+| 本机Codex官方SSH Remote UI | PASS | `remote-ssh-discovered:autodl-a2a` 已注册；桌面会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 完成只读 Smoke |
 | 14B下载与完整性校验 | 远程PASS / 回传LOCKED | T112已完成远程校验；T112A Profile A回传和本地复核通过后闭环 |
 | 14B真实推理Smoke | LOCKED / 未执行 | Token预算、环境、身份、usage、图片、显存和延迟通过并回传本地复核 |
 | 3B/8B下载与Smoke | LOCKED | 14B远程/本地Smoke通过且用户批准 |

@@ -79,6 +79,9 @@ server_execution_counters:
   real_inference_calls: 0
   remote_codex_installs: 1
   remote_codex_account_profiles_configured: 2
-  remote_codex_operational_model_calls: 2
+  remote_codex_operational_task_runs: 3
+  remote_codex_observed_model_turns: 8
+  remote_codex_cli_account_switch_tasks: 2
+  remote_codex_desktop_smoke_tasks: 1
   paper_experiment_model_calls: 0
   gpu_inference_calls: 0

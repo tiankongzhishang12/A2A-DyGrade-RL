@@ -2,7 +2,7 @@
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
-**同步版本**：V1.8 Official SSH Remote 控制面后端已完成；V1.7 AutoDL 交接与 V1.6 本地准备继续有效。当前等待本机 Codex 官方 SSH Connection UI 只读 Smoke、14B 下载产物回传与 Token/预算冻结，并继承 V1.4 Quality Champion 质量保护与正式质量协议
+**同步版本**：V1.8 方案 A Official SSH Remote 控制面已完整验收；V1.7 AutoDL 交接与 V1.6 本地准备继续有效。当前下一步为14B下载产物回传与Token/预算复核，并继承 V1.4 Quality Champion 质量保护与正式质量协议
 
 **前置文档**：plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 
@@ -401,7 +401,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 
 **目标**：在不改变 Dataset Semantic V2、无 Anchor、Gold、split、Paper、Prompt、Schema 和正式质量协议的前提下，将已冻结的自托管 Pilot 安全迁移到 AutoDL 数据盘；先完成远程 Codex 接手和 14B BF16 单模型 Smoke，再按门禁决定 3B/8B、真实 5 Item 和 30 Item。评分质量和严重错分风险始终优先，任何资源下降不得补偿质量失败。
 
-**当前状态快照（2026-08-17）**：AutoDL 服务器、远程仓库迁移、14B BF16 权重下载/完整性校验、冻结 5 Item 的 10 文件传输、远程 Codex CLI、进程级 Mihomo、双账号共享会话切换、远程 bootstrap Smoke 和跨账号同一 Thread 续接 Smoke 已完成；GPU 当前关闭。本机 Codex 官方 SSH Connection UI 只读 Smoke、14B 下载产物回传、Token/预算冻结、推理环境、14B 真实推理、3B/8B、真实 5 Item 和 30 Item 尚未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
+**当前状态快照（2026-08-17）**：AutoDL 服务器、远程仓库迁移、14B BF16 权重下载/完整性校验、冻结 5 Item 的 10 文件传输、远程 Codex CLI、进程级 Mihomo、双账号共享会话切换、远程 bootstrap Smoke、跨账号同一 Thread 续接 Smoke、本机 Codex 官方 SSH Connection UI 与桌面只读 Smoke 已完成；GPU 当前关闭。14B 下载产物回传、Token/预算复核、推理环境、14B 真实推理、3B/8B、真实 5 Item 和 30 Item 尚未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
 
 **独立验收**：远程 Codex 能在 GPU 关闭时读取并遵守 `AGENTS.md` 与交接文件，远程仓库保持干净且提交/hash 可审计；14B 服务在批准的 `max_model_len=32768` 下完成身份、结构化输出、文本/视觉 Token、图片、显存和延迟 Smoke；只有 3B/8B/14B 均通过相同契约后才能执行固定 5 Item 共 15 条 canonical 调用；5 Item validator PASS 且用户批准后才允许执行 30 Item。任何质量门失败、语义退化、身份不符、usage 缺失、OOM 或费用越界都必须 fail closed。
 
@@ -420,7 +420,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 - [X] T114A [US2] 配置两个独立 ChatGPT 账号保险库与单一共享 `CODEX_HOME`，实现只替换活动 `auth.json` 的显式手动切换；完成 `account-a → account-b → account-a` 验证和跨账号同一 Thread 续接 Smoke，确认凭据不同、持久会话状态不变，最终活动账号恢复为 `account-a`
 - [X] T115 [US2] 使用 `run_id=remote_codex_bootstrap_20260815T050326Z` 保存远程接手 Smoke，完成治理文件读取、Git/磁盘/GPU/后台任务报告、只读 `git status` 和批准路径最小写入/撤销；该 bootstrap 的 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
 - [ ] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed
-- [ ] T115B [US2] 在本机 Codex 桌面端 `Settings → Connections → SSH` 注册 `autodl-a2a`，选择 `/root/autodl-tmp/a2a-dygrade/repo`，从官方 SSH Remote 新建任务完成只读 Smoke；将结果补入 `official_ssh_remote_20260817T091500Z`，当前远程后端为 PASS，但桌面 Connection UI 与 UI Smoke 状态仍为 `PENDING_USER_UI`
+- [X] T115B [US2] 已在本机 Codex 桌面端注册 `remote-ssh-discovered:autodl-a2a` 并从该 Connection 对 `/root/autodl-tmp/a2a-dygrade/repo` 完成只读 Smoke；远程会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 的 `originator=Codex Desktop`，验证 cwd/hostname、分支、`HEAD=fc61512f2786c6e9cf011e4721f339a387381443`、clean tree、`account-a`、GPU关闭、治理原则理解和锁定阶段均正确，证据写入 `official_ssh_remote_20260817T091500Z`
 
 ### S2：14B推理环境与真实Smoke（需要GPU）
 
@@ -453,10 +453,10 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 ### Phase 10依赖顺序
 
 ```text
-已完成：T110 → T111 → T112；T113、T113A；T114 → T114A → T115
-当前无GPU下一步：T115B（官方SSH Remote UI Smoke）、T112A（14B下载产物回传）、T115A（预算复核）
-T113 + T113A + T114A + T115 → T115B
-T112A + T115A + T115B → T116 → T117 → T118 → T119 → T119A
+已完成服务器基线：T110 → T111 → T112
+已完成方案A：T113 + T113A + T114 + T114A + T115 + T115B
+当前无GPU下一步：T112A（14B下载产物回传）、T115A（预算复核）
+T112A + T115A → T116 → T117 → T118 → T119 → T119A
 T119A PASS + 用户批准 → T120 → T120A → T121 → T121A
 T121A PASS → T122 → T123 → T123A
 T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
@@ -464,7 +464,7 @@ T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
 
 ### Phase 10并行机会
 
-- T113 与 T113A 已完成。T112A、T115A和T115B均不需要GPU，可以在各自证据范围内并行，但T116必须等待三者全部PASS并获得恢复GPU批准。
+- T113、T113A和T115B已完成。T112A与T115A均不需要GPU，可以并行；T116必须等待两者PASS并获得恢复GPU批准。
 - T116中环境版本记录和磁盘/显存监控脚本准备可并行；14B服务启动必须等待环境锁完成。
 - T117的文本Smoke与T118的图片资产预检查可以并行准备，但真实模型调用应顺序执行并复用同一冻结服务配置。
 - 3B与8B下载在磁盘、带宽和费用批准后可并行；各自Profile A回传与本地复核可并行，但T120A必须全部PASS后才能顺序加载单卡真实Smoke，避免同时常驻造成不公平资源条件。

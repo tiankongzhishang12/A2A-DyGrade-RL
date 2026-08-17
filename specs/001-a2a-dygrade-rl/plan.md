@@ -13,9 +13,9 @@
 
 ### 当前真实状态
 
-- 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载及完整性检查、冻结 5 Item 的 10 文件传输与 hash receipt、远程 Codex CLI、共享 `CODEX_HOME`、两个 ChatGPT 账号手动切换、进程级 Mihomo、远程 bootstrap Smoke 和跨账号同一 Thread 续接 Smoke。
+- 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载及完整性检查、冻结 5 Item 的 10 文件传输与 hash receipt、远程 Codex CLI、共享 `CODEX_HOME`、两个 ChatGPT 账号手动切换、进程级 Mihomo、远程 bootstrap Smoke、跨账号同一 Thread 续接 Smoke，以及本机 Codex 官方 SSH Connection UI 与桌面只读 Smoke。
 - 当前资源：GPU 关闭；低资源保留状态约 0.5 CPU / 2 GB RAM；GPU 实例启动后为 RTX 4090D 约 48 GB、约 20 CPU、约 90 GB RAM。远程 Codex 控制面不需要 GPU。
-- 当前未完成：本机 Codex 桌面端官方 SSH Connection UI 只读 Smoke、现有14B下载run的Profile A回传与本地复核、Token/预算冻结、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item、30 Item。
+- 当前未完成：现有14B下载run的Profile A回传与本地复核、Token/预算复核、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item、30 Item。
 - 当前 Semantic V2：总 Item 29,451；train 20,637、dev 2,897、test 5,917；Paper 3,921；Paper 使用 Item 19,605；external leftover 9,846；quarantine 506。
 
 ### 质量与成本原则
