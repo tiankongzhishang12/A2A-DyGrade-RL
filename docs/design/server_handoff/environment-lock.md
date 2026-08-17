@@ -60,8 +60,11 @@ output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
 ## Commit与工作树门禁
 
 - `frozen_implementation_commit=44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`。
-- `workspace_handoff_commit=f1d08f2e539d0498acf030128a6343886246e9eb` 已存在于本地、Git远程和AutoDL工作树，且同步时核验了分支、提交、交接文件hash与 `dirty_worktree=false`；后续只更新指针或任务状态的 metadata-only 提交可以晚于该commit。
-- 真实run必须记录当前工作区commit、冻结实现commit和 `dirty_worktree=false`。
+- `core_handoff_contract_commit=f1d08f2e539d0498acf030128a6343886246e9eb` 冻结方案A后端与核心交接契约。
+- `desktop_smoke_status_commit=6141f1f67a9f3a2a2e81136268c31b3d748cf335` 记录本机Codex官方SSH Remote只读Smoke完成状态。
+- `final_document_convergence_commit=3050fd701ed6f66c65397d936a220be1ede8034d` 已存在于本地、Git远程和AutoDL工作树；同步时核验了分支、提交和 `dirty_worktree=false`。
+- 后续只更新提交指针、Git证据、产物receipt或最终状态的 metadata-only 提交可以晚于 `final_document_convergence_commit`，但不得改变冻结执行代码、配置、Prompt或测试。
+- 真实run必须记录当前工作区commit、冻结实现commit、适用的验收提交和 `dirty_worktree=false`。
 - 新文档提交可以位于冻结实现commit之后，但 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 相对冻结实现不得出现未批准变化。
 
 ## 数据门禁

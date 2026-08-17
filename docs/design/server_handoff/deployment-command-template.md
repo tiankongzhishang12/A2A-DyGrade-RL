@@ -10,7 +10,7 @@ git status --short --branch
 git rev-parse HEAD
 ```
 
-T113通过GitHub或Git bundle同步后，必须确认 `dirty_worktree=false`，并记录 `frozen_implementation_commit` 与 `workspace_handoff_commit`。
+T113通过GitHub或Git bundle同步后，必须确认 `dirty_worktree=false`，并记录 `frozen_implementation_commit`、`core_handoff_contract_commit`、`desktop_smoke_status_commit`与 `final_document_convergence_commit`。
 
 ## 2. 核对最小数据传输
 

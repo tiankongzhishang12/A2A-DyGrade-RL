@@ -93,17 +93,20 @@
 
 ## 5. 当前 Git 和代码冻结状态
 
-### Commit双重语义
+### Commit四层语义
 
 ```text
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-last_verified_remote_commit: f1d08f2e539d0498acf030128a6343886246e9eb
-workspace_handoff_commit: f1d08f2e539d0498acf030128a6343886246e9eb
+core_handoff_contract_commit: f1d08f2e539d0498acf030128a6343886246e9eb
+desktop_smoke_status_commit: 6141f1f67a9f3a2a2e81136268c31b3d748cf335
+final_document_convergence_commit: 3050fd701ed6f66c65397d936a220be1ede8034d
 ```
 
 - `frozen_implementation_commit`证明自托管Pilot执行代码、配置、Prompt和测试的冻结基线。
-- `last_verified_remote_commit`是 2026-08-17 方案 A 后端验收时本地、Git 远程和 AutoDL 工作树共同核验的提交。
-- `workspace_handoff_commit`记录已经审核并推送到Git远程仓库的交接内容冻结提交。由于提交无法自引用，后续只更新该指针、任务状态或验收摘要的 metadata-only 提交可以晚于该commit；不得借 metadata 提交静默改变执行代码、配置、Prompt或测试。
+- `core_handoff_contract_commit`冻结2026-08-17方案A后端验收与核心交接契约。
+- `desktop_smoke_status_commit`记录本机Codex官方SSH Remote UI只读Smoke完成状态。
+- `final_document_convergence_commit`记录方案A审计链、门禁表述和文档状态的最终内容收敛基线。
+- 由于提交无法自引用，后续只更新上述指针、Git证据、产物receipt或最终状态的 metadata-only 提交可以晚于 `final_document_convergence_commit`；不得借 metadata 提交静默改变执行代码、配置、Prompt或测试。
 - 文档提交可以位于冻结实现之后，但必须核对 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 未出现未批准变化。
 
 ### 仓库路径
@@ -124,7 +127,8 @@ workspace_handoff_commit: f1d08f2e539d0498acf030128a6343886246e9eb
 远程项目：/root/autodl-tmp/a2a-dygrade/repo
 数据盘根：/root/autodl-tmp/a2a-dygrade
 Git分支：codex/selfhosted-ministral3-pilot
-最近核验HEAD：f1d08f2e539d0498acf030128a6343886246e9eb
+最近核验内容HEAD：3050fd701ed6f66c65397d936a220be1ede8034d
+最终三端metadata HEAD：以 `outputs/runs/official_ssh_remote_20260817T091500Z/logs/git-sync-final.txt` 为准
 工作树：干净
 GPU：当前关闭；nvidia-smi 返回 No devices found
 低资源保留状态：约 0.5 CPU / 2 GB RAM / 无 GPU
@@ -315,7 +319,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | 阶段 | 当前状态 | 解锁条件 |
 |---|---|---|
 | Semantic Readiness | PASS | 已完成 |
-| V1.7文档提交与远程同步 | PASS | `workspace_handoff_commit=f1d08f2e539d0498acf030128a6343886246e9eb` 已推送并 fast-forward 同步到AutoDL，提交、文件hash和 clean tree 均通过；后续 metadata-only 状态提交允许晚于该commit |
+| 方案A文档与验收链收敛 | PASS | `core_handoff_contract_commit=f1d08f2...`、`desktop_smoke_status_commit=6141f1f...`、`final_document_convergence_commit=3050fd7...` 已推送并 fast-forward 同步到AutoDL；最终metadata HEAD以Git同步证据为准 |
 | 5 Item最小数据传输 | PASS | `remote_data_transfer_20260815T044106Z` receipt：10/10、hash mismatch=0、Dev/Test=0 |
 | 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
 | 本机Codex官方SSH Remote UI | PASS | `remote-ssh-discovered:autodl-a2a` 已注册；桌面会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 完成只读 Smoke |

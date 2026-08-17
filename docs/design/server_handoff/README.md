@@ -33,14 +33,21 @@
 - `checkpoint-runbook.md`：真实5 Item顺序执行、validator、回传与本地复核。
 - `artifact-return-manifest.md`：Download、Smoke、5 Item和30 Item四类产物回传契约。
 
-## 历史冻结实现
+## 冻结实现与验收提交链
 
 ```text
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-workspace_handoff_commit: f1d08f2e539d0498acf030128a6343886246e9eb
+core_handoff_contract_commit: f1d08f2e539d0498acf030128a6343886246e9eb
+desktop_smoke_status_commit: 6141f1f67a9f3a2a2e81136268c31b3d748cf335
+final_document_convergence_commit: 3050fd701ed6f66c65397d936a220be1ede8034d
 ```
 
-后续文档提交不得静默改变冻结执行代码、配置、Prompt或测试。真实run必须同时记录两个commit语义。
+- `frozen_implementation_commit`冻结自托管Pilot执行代码、配置、Prompt和测试。
+- `core_handoff_contract_commit`冻结方案A后端与核心交接契约。
+- `desktop_smoke_status_commit`记录本机Codex官方SSH Remote只读Smoke完成状态。
+- `final_document_convergence_commit`记录方案A审计链、门禁表述和文档状态的最终内容收敛基线。
+
+包含上述指针的后续 metadata-only 提交因无法自引用，可以晚于 `final_document_convergence_commit`，但不得静默改变冻结执行代码、配置、Prompt或测试。真实run必须记录当前工作区commit、`frozen_implementation_commit`和适用的验收提交语义。
 
 ## 禁止内容
 

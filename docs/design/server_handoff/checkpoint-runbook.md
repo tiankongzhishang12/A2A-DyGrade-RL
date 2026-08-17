@@ -7,7 +7,7 @@
 ## 前置门禁
 
 - 最新文档提交已同步到远程，工作树干净。
-- `frozen_implementation_commit`与 `workspace_handoff_commit`均已记录。
+- `frozen_implementation_commit`、`core_handoff_contract_commit`、`desktop_smoke_status_commit`与 `final_document_convergence_commit`均已记录。
 - T113A的 `data-transfer-receipt.json.status=PASS`，10个最小文件全部hash匹配。
 - `semantic_readiness_manifest.json.status=PASS`。
 - 3B、8B、14B三个revision均已冻结，三个模型Smoke及本地回传复核均PASS。

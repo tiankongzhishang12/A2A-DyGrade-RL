@@ -102,7 +102,7 @@
 
 ### ServerHandoffManifest
 
-- `frozen_implementation_commit`、`workspace_handoff_commit`、`dirty_worktree_required`；前者冻结执行代码，后者记录已审核并推送的交接内容提交。由于commit不能自引用，单纯写入该指针的metadata-only提交可以晚于该commit。
+- `frozen_implementation_commit`、`core_handoff_contract_commit`、`desktop_smoke_status_commit`、`final_document_convergence_commit`、`dirty_worktree_required`；分别冻结执行实现、核心交接契约、Desktop Smoke状态和最终文档内容收敛基线。由于commit不能自引用，单纯写入这些指针、Git证据或receipt的metadata-only提交可以晚于内容收敛commit。
 - 模型、许可证、revision冻结要求。
 - 环境/GPU/磁盘路径和禁止C盘规则。
 - data transfer文件、大小、SHA-256。
