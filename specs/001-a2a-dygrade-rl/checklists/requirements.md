@@ -33,4 +33,4 @@
 ## 备注
 
 - V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 决策写入后重新校验通过；FR-001 至 FR-092、SC-001 至 SC-050 编号连续且无重复，没有遗留澄清、TODO 或未声明占位标记。
-- V1.6 本地 P1–P8 已完成；V1.7 已冻结质量优先、10文件最小传输、Official API-Equivalent Token Cost、调用硬门、分阶段产物回传和30 Item QWK readiness。T113A、T114、T114A和T115已有远程证据并已更新状态；T113需等待本次文档提交/推送/AutoDL同步闭环，T115B需等待本机Codex官方SSH Connection UI只读Smoke，其余真实服务器任务必须在各自远程与本地证据通过前保持未完成。
+- V1.6 本地 P1–P8 已完成；V1.7 已冻结质量优先、10文件最小传输、Official API-Equivalent Token Cost、调用硬门、分阶段产物回传和30 Item QWK readiness。T113A、T114、T114A和T115已有远程证据并已更新状态；T113已通过提交/推送/AutoDL同步闭环，T115B仍需等待本机Codex官方SSH Connection UI只读Smoke，其余真实服务器任务必须在各自远程与本地证据通过前保持未完成。

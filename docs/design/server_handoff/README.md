@@ -38,7 +38,7 @@
 
 ```text
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-workspace_handoff_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
+workspace_handoff_commit: f1d08f2e539d0498acf030128a6343886246e9eb
 ```
 
 后续文档提交不得静默改变冻结执行代码、配置、Prompt或测试。真实run必须同时记录两个commit语义。

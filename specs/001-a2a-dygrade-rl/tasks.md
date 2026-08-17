@@ -414,13 +414,13 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 
 ### S1：交接文档提交与远程Codex接管（不需要GPU）
 
-- [ ] T113 [US2] 更新并核对 `AGENTS.md`、`.specify/memory/constitution.md`、`specs/001-a2a-dygrade-rl/spec.md`、`plan.md`、`tasks.md`、`research.md`、`data-model.md`、`quickstart.md`、`checklists/requirements.md`、`docs/design/server_handoff/remote-codex-handoff.md` 及全部 server_handoff 契约；执行跨文档 analyze 和 diff 检查后提交并推送当前分支，再通过远程 Git 或 Git bundle 将同一提交同步到 `/root/autodl-tmp/a2a-dygrade/repo`，验证本地/远程 commit、文件 SHA-256 和 `dirty_worktree=false`
+- [X] T113 [US2] 完成交接文档与全部 server_handoff 契约核对，跨文档 analyze 为 PASS（CRITICAL/HIGH=0）、`git diff --check`、JSON/YAML解析均通过；提交 `f1d08f2e539d0498acf030128a6343886246e9eb` 已推送并 fast-forward 同步到 `/root/autodl-tmp/a2a-dygrade/repo`，本地/远程 commit、治理文件 SHA-256 和 `dirty_worktree=false` 均已核验
 - [X] T113A [US2] 按 `docs/design/server_handoff/data-transfer-manifest.json` 将冻结 5 Item 所需 10 个最小文件传输到远程对应相对路径；`remote_data_transfer_20260815T044106Z` receipt 为 expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0，状态 PASS
 - [X] T114 [US2] 经用户批准，将远程 Codex CLI、共享 `CODEX_HOME`、账号保险库和必要日志放在 `/root/autodl-tmp/a2a-dygrade/runtime/codex/`，为可选 VS Code Server 保留 `/root/autodl-tmp/a2a-dygrade/runtime/vscode/`；在直连不可用后配置仅监听 `127.0.0.1` 的 Codex 进程级 Mihomo，未将认证Token、SSH凭据或代理订阅写入仓库
 - [X] T114A [US2] 配置两个独立 ChatGPT 账号保险库与单一共享 `CODEX_HOME`，实现只替换活动 `auth.json` 的显式手动切换；完成 `account-a → account-b → account-a` 验证和跨账号同一 Thread 续接 Smoke，确认凭据不同、持久会话状态不变，最终活动账号恢复为 `account-a`
 - [X] T115 [US2] 使用 `run_id=remote_codex_bootstrap_20260815T050326Z` 保存远程接手 Smoke，完成治理文件读取、Git/磁盘/GPU/后台任务报告、只读 `git status` 和批准路径最小写入/撤销；该 bootstrap 的 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
-- [ ] T115B [US2] 在本机 Codex 桌面端 `Settings → Connections → SSH` 注册 `autodl-a2a`，选择 `/root/autodl-tmp/a2a-dygrade/repo`，从官方 SSH Remote 新建任务完成只读 Smoke；将结果补入 `official_ssh_remote_20260817T091500Z`，当前远程后端为 PASS，但桌面 Connection UI 与 UI Smoke 状态仍为 `PENDING_USER_UI`
 - [ ] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed
+- [ ] T115B [US2] 在本机 Codex 桌面端 `Settings → Connections → SSH` 注册 `autodl-a2a`，选择 `/root/autodl-tmp/a2a-dygrade/repo`，从官方 SSH Remote 新建任务完成只读 Smoke；将结果补入 `official_ssh_remote_20260817T091500Z`，当前远程后端为 PASS，但桌面 Connection UI 与 UI Smoke 状态仍为 `PENDING_USER_UI`
 
 ### S2：14B推理环境与真实Smoke（需要GPU）
 
@@ -453,10 +453,10 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 ### Phase 10依赖顺序
 
 ```text
-已完成：T110 → T111 → T112
-当前下一步：T113
-T113 → T113A → T112A → T114 → T115 → T115A
-T115A → T116 → T117 → T118 → T119 → T119A
+已完成：T110 → T111 → T112；T113、T113A；T114 → T114A → T115
+当前无GPU下一步：T115B（官方SSH Remote UI Smoke）、T112A（14B下载产物回传）、T115A（预算复核）
+T113 + T113A + T114A + T115 → T115B
+T112A + T115A + T115B → T116 → T117 → T118 → T119 → T119A
 T119A PASS + 用户批准 → T120 → T120A → T121 → T121A
 T121A PASS → T122 → T123 → T123A
 T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
@@ -464,7 +464,7 @@ T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
 
 ### Phase 10并行机会
 
-- T113 的本地文档 hash 核对与 Git 提交准备可以并行，但远程同步必须等待本地提交形成；T113A 必须等待远程仓库到达相同提交。
+- T113 与 T113A 已完成。T112A、T115A和T115B均不需要GPU，可以在各自证据范围内并行，但T116必须等待三者全部PASS并获得恢复GPU批准。
 - T116中环境版本记录和磁盘/显存监控脚本准备可并行；14B服务启动必须等待环境锁完成。
 - T117的文本Smoke与T118的图片资产预检查可以并行准备，但真实模型调用应顺序执行并复用同一冻结服务配置。
 - 3B与8B下载在磁盘、带宽和费用批准后可并行；各自Profile A回传与本地复核可并行，但T120A必须全部PASS后才能顺序加载单卡真实Smoke，避免同时常驻造成不公平资源条件。

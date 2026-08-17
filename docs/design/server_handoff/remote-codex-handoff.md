@@ -97,8 +97,8 @@
 
 ```text
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-last_verified_remote_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
-workspace_handoff_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
+last_verified_remote_commit: f1d08f2e539d0498acf030128a6343886246e9eb
+workspace_handoff_commit: f1d08f2e539d0498acf030128a6343886246e9eb
 ```
 
 - `frozen_implementation_commit`证明自托管Pilot执行代码、配置、Prompt和测试的冻结基线。
@@ -124,7 +124,7 @@ workspace_handoff_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
 远程项目：/root/autodl-tmp/a2a-dygrade/repo
 数据盘根：/root/autodl-tmp/a2a-dygrade
 Git分支：codex/selfhosted-ministral3-pilot
-最近核验HEAD：7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
+最近核验HEAD：f1d08f2e539d0498acf030128a6343886246e9eb
 工作树：干净
 GPU：当前关闭；nvidia-smi 返回 No devices found
 低资源保留状态：约 0.5 CPU / 2 GB RAM / 无 GPU
@@ -315,7 +315,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | 阶段 | 当前状态 | 解锁条件 |
 |---|---|---|
 | Semantic Readiness | PASS | 已完成 |
-| V1.7文档提交与远程同步 | BASELINE_PASS / UPDATE_PENDING | 三方同步基线为 `7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2`；本次状态文档仍需提交、推送和同步后才能关闭T113 |
+| V1.7文档提交与远程同步 | PASS | `workspace_handoff_commit=f1d08f2e539d0498acf030128a6343886246e9eb` 已推送并 fast-forward 同步到AutoDL，提交、文件hash和 clean tree 均通过；后续 metadata-only 状态提交允许晚于该commit |
 | 5 Item最小数据传输 | PASS | `remote_data_transfer_20260815T044106Z` receipt：10/10、hash mismatch=0、Dev/Test=0 |
 | 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
 | 本机Codex官方SSH Remote UI | PENDING_USER_UI | 注册 `autodl-a2a` 并从桌面 Connection 完成只读 Smoke |
