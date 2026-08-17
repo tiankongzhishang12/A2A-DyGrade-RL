@@ -2,7 +2,7 @@
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
-**同步版本**：V1.7 AutoDL 服务器接管与真实 Ministral 3 Pilot 文档契约已收敛并推送Git远程仓库，V1.6 本地准备已完成；当前仅等待 T113 的AutoDL工作树同步部分，并继承 V1.4 Quality Champion 质量保护与正式质量协议
+**同步版本**：V1.8 Official SSH Remote 控制面后端已完成；V1.7 AutoDL 交接与 V1.6 本地准备继续有效。当前等待本机 Codex 官方 SSH Connection UI 只读 Smoke、14B 下载产物回传与 Token/预算冻结，并继承 V1.4 Quality Champion 质量保护与正式质量协议
 
 **前置文档**：plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 
@@ -401,7 +401,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 
 **目标**：在不改变 Dataset Semantic V2、无 Anchor、Gold、split、Paper、Prompt、Schema 和正式质量协议的前提下，将已冻结的自托管 Pilot 安全迁移到 AutoDL 数据盘；先完成远程 Codex 接手和 14B BF16 单模型 Smoke，再按门禁决定 3B/8B、真实 5 Item 和 30 Item。评分质量和严重错分风险始终优先，任何资源下降不得补偿质量失败。
 
-**当前状态快照（2026-08-14）**：AutoDL 服务器、远程仓库迁移和 14B BF16 权重下载/完整性校验已完成；GPU 当前关闭；远程 Codex、推理环境、14B 真实推理、3B/8B、真实 5 Item 和 30 Item 均未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
+**当前状态快照（2026-08-17）**：AutoDL 服务器、远程仓库迁移、14B BF16 权重下载/完整性校验、冻结 5 Item 的 10 文件传输、远程 Codex CLI、进程级 Mihomo、双账号共享会话切换、远程 bootstrap Smoke 和跨账号同一 Thread 续接 Smoke 已完成；GPU 当前关闭。本机 Codex 官方 SSH Connection UI 只读 Smoke、14B 下载产物回传、Token/预算冻结、推理环境、14B 真实推理、3B/8B、真实 5 Item 和 30 Item 尚未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
 
 **独立验收**：远程 Codex 能在 GPU 关闭时读取并遵守 `AGENTS.md` 与交接文件，远程仓库保持干净且提交/hash 可审计；14B 服务在批准的 `max_model_len=32768` 下完成身份、结构化输出、文本/视觉 Token、图片、显存和延迟 Smoke；只有 3B/8B/14B 均通过相同契约后才能执行固定 5 Item 共 15 条 canonical 调用；5 Item validator PASS 且用户批准后才允许执行 30 Item。任何质量门失败、语义退化、身份不符、usage 缺失、OOM 或费用越界都必须 fail closed。
 
@@ -415,9 +415,11 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 ### S1：交接文档提交与远程Codex接管（不需要GPU）
 
 - [ ] T113 [US2] 更新并核对 `AGENTS.md`、`.specify/memory/constitution.md`、`specs/001-a2a-dygrade-rl/spec.md`、`plan.md`、`tasks.md`、`research.md`、`data-model.md`、`quickstart.md`、`checklists/requirements.md`、`docs/design/server_handoff/remote-codex-handoff.md` 及全部 server_handoff 契约；执行跨文档 analyze 和 diff 检查后提交并推送当前分支，再通过远程 Git 或 Git bundle 将同一提交同步到 `/root/autodl-tmp/a2a-dygrade/repo`，验证本地/远程 commit、文件 SHA-256 和 `dirty_worktree=false`
-- [ ] T113A [US2] 按 `docs/design/server_handoff/data-transfer-manifest.json` 将冻结 5 Item 所需 10 个最小文件传输到远程对应相对路径，生成 `outputs/runs/remote_data_transfer_<timestamp>/configs/data-transfer-receipt.json`；必须满足 expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0，未通过时禁止图片 Smoke 和真实 5 Item
-- [ ] T114 [US2] 在用户明确批准后，将远程 Codex CLI、`CODEX_HOME`、VS Code Server和必要运行日志规划到 `/root/autodl-tmp/a2a-dygrade/runtime/`；先测试直连，只有直连失败才配置仅监听 `127.0.0.1` 的 Mihomo 进程级代理，禁止把认证Token、SSH凭据或代理订阅写入仓库
-- [ ] T115 [US2] 使用唯一 `run_id=remote_codex_bootstrap_<timestamp>` 在 `outputs/runs/<run_id>/` 保存远程接手 Smoke：读取 `AGENTS.md` 和 `remote-codex-handoff.md`、报告 Git/磁盘/GPU/后台任务、运行只读 `git status`、执行批准路径的最小临时文件写入/撤销，并确认 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
+- [X] T113A [US2] 按 `docs/design/server_handoff/data-transfer-manifest.json` 将冻结 5 Item 所需 10 个最小文件传输到远程对应相对路径；`remote_data_transfer_20260815T044106Z` receipt 为 expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0，状态 PASS
+- [X] T114 [US2] 经用户批准，将远程 Codex CLI、共享 `CODEX_HOME`、账号保险库和必要日志放在 `/root/autodl-tmp/a2a-dygrade/runtime/codex/`，为可选 VS Code Server 保留 `/root/autodl-tmp/a2a-dygrade/runtime/vscode/`；在直连不可用后配置仅监听 `127.0.0.1` 的 Codex 进程级 Mihomo，未将认证Token、SSH凭据或代理订阅写入仓库
+- [X] T114A [US2] 配置两个独立 ChatGPT 账号保险库与单一共享 `CODEX_HOME`，实现只替换活动 `auth.json` 的显式手动切换；完成 `account-a → account-b → account-a` 验证和跨账号同一 Thread 续接 Smoke，确认凭据不同、持久会话状态不变，最终活动账号恢复为 `account-a`
+- [X] T115 [US2] 使用 `run_id=remote_codex_bootstrap_20260815T050326Z` 保存远程接手 Smoke，完成治理文件读取、Git/磁盘/GPU/后台任务报告、只读 `git status` 和批准路径最小写入/撤销；该 bootstrap 的 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
+- [ ] T115B [US2] 在本机 Codex 桌面端 `Settings → Connections → SSH` 注册 `autodl-a2a`，选择 `/root/autodl-tmp/a2a-dygrade/repo`，从官方 SSH Remote 新建任务完成只读 Smoke；将结果补入 `official_ssh_remote_20260817T091500Z`，当前远程后端为 PASS，但桌面 Connection UI 与 UI Smoke 状态仍为 `PENDING_USER_UI`
 - [ ] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed
 
 ### S2：14B推理环境与真实Smoke（需要GPU）

@@ -2,7 +2,7 @@
 
 > **用途**：本文件是远程 Codex 首次连接 AutoDL 服务器后的单一接手入口，负责说明当前研究目标、服务器状态、已完成内容、立即任务、实验门禁和禁止事项。
 >
-> **状态快照日期**：2026-08-14（Asia/Shanghai）
+> **状态快照日期**：2026-08-17（Asia/Shanghai）
 >
 > **优先级**：项目长期规则以仓库根目录 `AGENTS.md` 为最高事实来源；研究需求以 `specs/001-a2a-dygrade-rl/spec.md` 为准；本文件只负责当前远程执行状态。若本文件与旧服务器交接摘要中的阶段状态冲突，以时间戳更新且经过 Git 审核的文件为准，但任何文件都不得覆盖 `AGENTS.md` 的硬规则。
 
@@ -97,11 +97,13 @@
 
 ```text
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-workspace_handoff_commit: 85e4cb26778d26f2462041986143f70bdcc54998
+last_verified_remote_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
+workspace_handoff_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
 ```
 
 - `frozen_implementation_commit`证明自托管Pilot执行代码、配置、Prompt和测试的冻结基线。
-- `workspace_handoff_commit`记录已经审核并推送到Git远程仓库的交接内容冻结提交。由于提交无法自引用，后续仅写入该指针或更新状态的metadata-only提交可以晚于该commit；不得借metadata提交静默改变执行代码、配置、Prompt或测试。
+- `last_verified_remote_commit`是 2026-08-17 方案 A 后端验收时本地、Git 远程和 AutoDL 工作树共同核验的提交。
+- `workspace_handoff_commit`记录已经审核并推送到Git远程仓库的交接内容冻结提交。由于提交无法自引用，后续只更新该指针、任务状态或验收摘要的 metadata-only 提交可以晚于该commit；不得借 metadata 提交静默改变执行代码、配置、Prompt或测试。
 - 文档提交可以位于冻结实现之后，但必须核对 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 未出现未批准变化。
 
 ### 仓库路径
@@ -116,16 +118,19 @@ workspace_handoff_commit: 85e4cb26778d26f2462041986143f70bdcc54998
 
 ## 6. 远程服务器状态快照
 
-截至 2026-08-14，已知状态如下：
+截至 2026-08-17，已知状态如下：
 
 ```text
 远程项目：/root/autodl-tmp/a2a-dygrade/repo
 数据盘根：/root/autodl-tmp/a2a-dygrade
-GPU：当前关闭
+Git分支：codex/selfhosted-ministral3-pilot
+最近核验HEAD：7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
+工作树：干净
+GPU：当前关闭；nvidia-smi 返回 No devices found
 低资源保留状态：约 0.5 CPU / 2 GB RAM / 无 GPU
 GPU实例启动后：RTX 4090D 约 48 GB / 约 20 CPU / 约 90 GB RAM
 数据盘：最近核验约已用 27 GB、剩余 264 GB；执行前必须重新检查
-当前后台任务：最近核验时无模型下载、校验或推理任务
+当前后台任务：无模型下载、校验、推理或残留 Codex App Server 进程；Mihomo 仅作为远程 Codex 网络辅助运行
 ```
 
 低资源保留状态可以用于 SSH、文档整理、轻量 Git 操作和远程 Codex 基础配置，但不用于 vLLM、模型加载、大规模测试或并行数据处理。Codex 远程控制本身不需要 GPU；只有本地模型加载和推理需要恢复 GPU。
@@ -134,16 +139,52 @@ GPU实例启动后：RTX 4090D 约 48 GB / 约 20 CPU / 约 90 GB RAM
 
 ```yaml
 five_item_data_transfer:
-  status: pending_t113a
+  run_id: remote_data_transfer_20260815T044106Z
+  status: PASS
   expected_files: 10
-  received_files: 0
-  hash_mismatch_count: unknown
+  received_files: 10
+  hash_mismatch_count: 0
   dev_test_file_count: 0
   non_checkpoint_train_file_count: 0
   prepared_root: /root/autodl-tmp/a2a-dygrade/repo/data/processed/semantic_v2
 ```
 
-Git同步不会携带被 `.gitignore` 排除的Semantic V2和checkpoint输入。T113A必须按 `data-transfer-manifest.json` 单独传输10个最小文件并生成接收receipt；在receipt PASS前，不执行图片Smoke或真实5 Item。
+Git同步不会携带被 `.gitignore` 排除的 Semantic V2 和 checkpoint 输入，因此这 10 个文件已经按 `data-transfer-manifest.json` 单独传输并完成接收 receipt。数据传输门已通过，但图片 Smoke 和真实 5 Item 仍受模型 Smoke、环境、预算和用户批准等后续门禁约束。
+
+### 方案 A：官方 SSH Remote 控制面状态
+
+```text
+主入口：本机 Codex 桌面端 → 官方 SSH Remote → AutoDL Codex App Server
+SSH Host别名：autodl-a2a
+远程项目：/root/autodl-tmp/a2a-dygrade/repo
+远程Codex CLI：0.147.0
+共享CODEX_HOME：/root/autodl-tmp/a2a-dygrade/runtime/codex/home
+账号配置：account-a、account-b；最终活动账号 account-a
+Mihomo：127.0.0.1:7890，allow-lan=false，仅注入Codex子进程
+后端状态：PASS
+桌面Connection UI：PENDING_USER_UI
+桌面只读Smoke：PENDING_USER_UI
+```
+
+远程后端验收 run 为：
+
+```text
+outputs/runs/official_ssh_remote_20260817T091500Z/
+```
+
+已验证专用 SSH key 免密连接、新登录 Shell 的 Codex PATH、ChatGPT 登录、Mihomo 连通性、App Server、干净 Git 工作树、GPU 关闭、两个账号凭据不同以及共享会话状态不变。账号 B 已通过 `codex exec resume` 续接账号 A 创建的同一 Thread，并复述相同标记。该 Smoke 使用 2 次远程 Codex 操作性模型调用，但论文实验模型调用、论文 Token 成本与 GPU 调用均为 0。
+
+账号切换只能由用户显式执行：
+
+```bash
+codex-account list
+codex-account status
+codex-account switch account-a
+codex-account switch account-b
+codex-account verify
+```
+
+禁止自动额度检测、自动轮询账号或自动重发。两个账号共享会话数据库，但只共享历史与配置，不共享认证文件；`auth.json` 和账号保险库权限必须保持 `600/700`。
 
 ## 7. 模型状态
 
@@ -192,12 +233,13 @@ approved_runtime_max_model_len: 32768
 - 无 Anchor 主实验协议已经冻结；
 - Cheap/Mid/Strong 自托管请求、统一 Prompt、响应 Schema、Token、成本、attempt 和 resume 契约已经实现；
 - 固定 5 Item Checkpoint 输入已经构建；
-- Fake Chat Completions 端到端 workflow 已通过；
-- Fake validator PASS 只证明工程契约成立，不代表真实模型质量通过；
-- 服务器项目已搬迁到数据盘；
+- Fake Chat Completions 端到端 workflow 已通过；Fake validator PASS 只证明工程契约成立，不代表真实模型质量通过；
+- 服务器项目已搬迁到数据盘，Git 分支、HEAD 和干净工作树已核验；
 - 14B BF16模型已下载并完成文件、权重索引、架构、精度和SHA-256检查；
-- GPU保持关闭完成了模型下载；
-- 当前没有执行真实14B推理、真实5 Item或30 Item。
+- 冻结 5 Item 所需 10 个最小文件已传输，receipt 为 10/10、hash mismatch 0、Dev/Test 0；
+- 远程 Codex CLI、共享 `CODEX_HOME`、两个账号保险库、手动切换器和进程级 Mihomo 已配置；
+- 远程 bootstrap Smoke、App Server Smoke 与跨账号同一 Thread 续接 Smoke 已通过；
+- GPU保持关闭，当前没有执行真实14B推理、真实5 Item或30 Item。
 
 权威本地准备 run 包括：
 
@@ -209,11 +251,9 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 ## 9. 当前尚未完成内容
 
-- V1.7交接内容提交 `85e4cb26778d26f2462041986143f70bdcc54998` 已推送到Git远程分支；AutoDL服务器工作树同步仍属于T113未完成部分；
-- 冻结5 Item所需10个最小文件尚未执行T113A传输和远程hash接收审计；
+- 本机 Codex 桌面端尚未在 `Settings → Connections → SSH` 注册 `autodl-a2a`，官方 SSH Remote 的 UI 只读 Smoke 仍需用户完成；
 - 现有14B下载run尚未执行T112A Profile A回传和本地hash复核；
-- 远程 Codex CLI / Desktop SSH Remote 尚未完成部署和认证；
-- Linux 网络直连与按需 Mihomo 方案尚未执行正式 Smoke；
+- Token价格与真实调用预算尚未完成 T115A 冻结；
 - 远程推理虚拟环境及 vLLM/依赖尚未形成最终环境锁；
 - 14B BF16 尚未启动服务；
 - 14B 文本身份、结构化输出、usage 和延迟 Smoke 尚未执行；
@@ -229,21 +269,27 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 当前立即目标按任务门禁顺序执行：
 
-### 阶段 A：文档、Git与最小数据（不需要GPU）
+### 阶段 A：完成本机 Codex 官方 SSH Remote UI Smoke（不需要GPU）
 
-1. V1.7交接内容commit已推送Git远程仓库；T113剩余工作是通过Git或Git bundle同步到AutoDL工作树；
-2. 核对 `workspace_handoff_commit`、当前Git HEAD、交接文件hash并确认远程工作树干净；
-3. T113A传输冻结5 Item所需10个最小文件并生成接收receipt；
-4. receipt必须满足expected=10、received=10、hash mismatch=0、Dev/Test=0、non-checkpoint train=0；
-5. T112A将现有14B下载run按Profile A回传本地并完成hash复核，不回传模型权重。
+1. 在本机 Codex 桌面端打开 `Settings → Connections → SSH → Add`；
+2. 添加已有 SSH Host 别名 `autodl-a2a`，远程目录选择 `/root/autodl-tmp/a2a-dygrade/repo`；
+3. 从该 Connection 新建远程任务，只执行 `pwd`、`hostname`、Git branch/HEAD/status、读取 `AGENTS.md` 和本文件、确认 GPU 关闭；
+4. 将结果补入 `official_ssh_remote_20260817T091500Z`，把两个 `PENDING_USER_UI` 检查改为 PASS；
+5. 不安装依赖、不打开 GPU、不启动模型服务、不进行论文实验调用。
 
-### 阶段 B：配置远程Codex（不需要GPU）
+### 阶段 B：完成下载产物回传与预算冻结（不需要GPU）
 
-1. 保持GPU关闭，核验SSH key、Git、磁盘和后台任务；
-2. 将Codex、VS Code Server与必要运行日志规划到数据盘；
-3. 优先测试直连，只有直连失败才使用仅监听 `127.0.0.1` 的进程级Mihomo；
-4. 认证缓存、SSH凭据和代理订阅不得进入仓库；
-5. 完成读取 `AGENTS.md`、本文件、`git status` 和批准路径最小写入/撤销Smoke。
+1. T112A将现有14B下载run按Profile A回传本地并完成hash复核，不回传模型权重；
+2. T115A冻结 Token 价格、canonical 调用数、attempt、并发、超时、上下文和输出上限；
+3. `server_hourly_price_usd=null`，服务器租金不进入论文指标；
+4. 复核 10 文件 receipt、远程 Git clean tree 和全部前置 gate 后，才允许申请恢复 GPU。
+
+### 日常使用、历史和改动查看
+
+- 从本机 Codex 桌面端官方 SSH Connection 创建的任务，其历史记录显示在本机 Codex 任务侧栏；任务的 Shell、文件读取和修改实际发生在 AutoDL。
+- 远程 CLI 会话保存在共享 `CODEX_HOME`，可通过 `codex resume` 或 `codex exec resume <thread_id>` 续接；切换账号不会删除该历史。
+- VS Code Remote-SSH 只用于浏览远程文件、Git diff、终端、测试和日志，不是远程 Codex 会话历史的唯一入口；Codex IDE Extension 不作为方案 A 的前置门禁。
+- 查看代码改动时，以远程仓库中的 `git status`、`git diff`、`git log` 和 `outputs/runs/<run_id>/` 为准。
 
 建议运行时目录：
 
@@ -269,9 +315,10 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | 阶段 | 当前状态 | 解锁条件 |
 |---|---|---|
 | Semantic Readiness | PASS | 已完成 |
-| V1.7文档提交与远程同步 | LOCKED | T113提交、推送/Bundle同步、commit/hash/clean tree通过 |
-| 5 Item最小数据传输 | LOCKED | T113A receipt PASS，10/10文件hash匹配，Dev/Test=0 |
-| 远程Codex接手 | LOCKED | T114–T115完成且GPU/真实模型调用/论文Token成本均为0 |
+| V1.7文档提交与远程同步 | BASELINE_PASS / UPDATE_PENDING | 三方同步基线为 `7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2`；本次状态文档仍需提交、推送和同步后才能关闭T113 |
+| 5 Item最小数据传输 | PASS | `remote_data_transfer_20260815T044106Z` receipt：10/10、hash mismatch=0、Dev/Test=0 |
+| 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
+| 本机Codex官方SSH Remote UI | PENDING_USER_UI | 注册 `autodl-a2a` 并从桌面 Connection 完成只读 Smoke |
 | 14B下载与完整性校验 | 远程PASS / 回传LOCKED | T112已完成远程校验；T112A Profile A回传和本地复核通过后闭环 |
 | 14B真实推理Smoke | LOCKED / 未执行 | Token预算、环境、身份、usage、图片、显存和延迟通过并回传本地复核 |
 | 3B/8B下载与Smoke | LOCKED | 14B远程/本地Smoke通过且用户批准 |
@@ -405,6 +452,8 @@ AutoDL服务器租金、GPU空闲、模型下载、模型加载、环境安装�
 - 能识别3B、8B、真实5 Item、30 Item和Formal仍被锁定；
 - 能确认Codex远程配置阶段不需要GPU；
 - 能确认10个最小数据文件的receipt状态和统一prepared root；
+- 能区分远程 Codex CLI bootstrap、官方 SSH Remote、VS Code Remote-SSH 和 Codex IDE Extension 四个不同入口/状态；
+- 能说明两个账号共享会话数据库但认证文件独立，且切换只能由用户显式触发；
 - 能区分远程run完成与产物回传、本地复核完成；
 - 不把服务器租金加入论文实验成本；
 - 能报告Git、磁盘、GPU和后台进程的真实状态；

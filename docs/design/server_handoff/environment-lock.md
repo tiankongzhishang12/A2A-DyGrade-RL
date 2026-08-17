@@ -1,6 +1,6 @@
 # 服务器环境冻结要求
 
-> **状态快照**：2026-08-14。硬件与14B权重已经核验；推理软件环境尚未安装和冻结。所有路径必须位于AutoDL数据盘。
+> **状态快照**：2026-08-17。硬件与14B权重、远程Codex控制面和10文件传输已经核验；推理软件环境尚未安装和冻结。所有路径必须位于AutoDL数据盘。
 
 ## 已核验硬件
 
@@ -11,6 +11,14 @@
 - 低资源保留状态：约0.5核CPU、2GB内存、无GPU。
 - 当前GPU状态：关闭。
 - 磁盘：模型、虚拟环境、缓存、prepared data和run产物全部放数据盘；任何阶段开始前重新检查容量并保留至少20%余量。
+
+## 已冻结远程控制面
+
+- Codex CLI、共享 `CODEX_HOME`、账号保险库、切换器和日志位于 `/root/autodl-tmp/a2a-dygrade/runtime/codex/`。
+- Mihomo位于 `/root/autodl-tmp/a2a-dygrade/runtime/mihomo/`，只监听 `127.0.0.1`，且只由Codex包装器注入Codex子进程。
+- 可选VS Code Server目录预留为 `/root/autodl-tmp/a2a-dygrade/runtime/vscode/`；它不是方案A的阻塞项。
+- 两个ChatGPT账号共享会话状态但使用独立认证文件；只允许用户显式手动切换。
+- 当前GPU关闭；远程Codex操作性模型调用不计入论文实验成本。
 
 ## 待冻结软件版本
 
@@ -52,7 +60,7 @@ output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
 ## Commit与工作树门禁
 
 - `frozen_implementation_commit=44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`。
-- `workspace_handoff_commit=85e4cb26778d26f2462041986143f70bdcc54998` 已冻结并推送到Git远程仓库；AutoDL工作树同步后还必须核对该提交为祖先且交接文件hash一致。
+- 最近已核验的 `workspace_handoff_commit=7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2` 已存在于本地、Git远程和AutoDL工作树；本次状态更新提交后必须再次核对新提交为三方共同HEAD、交接文件hash一致且工作树干净。
 - 真实run必须记录当前工作区commit、冻结实现commit和 `dirty_worktree=false`。
 - 新文档提交可以位于冻结实现commit之后，但 `src/`、`scripts/`、`configs/`、`prompts/` 和 `tests/` 相对冻结实现不得出现未批准变化。
 

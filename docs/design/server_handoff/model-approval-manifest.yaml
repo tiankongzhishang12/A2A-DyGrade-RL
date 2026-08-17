@@ -1,6 +1,6 @@
 schema_version: selfhosted_model_approval_v2
 frozen_implementation_commit: 44f3e5fcf825794d4516455b9c7dd3fd3c5bc796
-workspace_handoff_commit: 85e4cb26778d26f2462041986143f70bdcc54998
+workspace_handoff_commit: 7422cdbaa04e8fb0310ad926dd1f823c7a1d6bb2
 dirty_worktree_required: false
 status: partially_executed
 family: Ministral 3 Instruct
@@ -10,7 +10,7 @@ official_context_tokens: 262144
 approved_runtime_max_model_len: 32768
 common_prompt: prompts/selfhosted_v1/scorer.txt
 common_response_schema: a2a_dygrade_agent_output_v2
-verified_at: "2026-08-14"
+verified_at: "2026-08-17"
 official_sources:
   - https://docs.mistral.ai/models/ministral-3-3b-25-12
   - https://docs.mistral.ai/models/ministral-3-8b-25-12
@@ -77,4 +77,8 @@ server_execution_counters:
   model_downloads_completed: 1
   dependency_installs_completed: 0
   real_inference_calls: 0
-  remote_codex_installs: 0
+  remote_codex_installs: 1
+  remote_codex_account_profiles_configured: 2
+  remote_codex_operational_model_calls: 2
+  paper_experiment_model_calls: 0
+  gpu_inference_calls: 0

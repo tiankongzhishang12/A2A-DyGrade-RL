@@ -1,7 +1,7 @@
 # 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
 
 **分支**：`001-a2a-dygrade-rl`
-**日期**：2026-08-14
+**日期**：2026-08-17
 **规格**：[spec.md](./spec.md)
 **依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.3、`AGENTS.md` 1.5.0
 
@@ -13,9 +13,9 @@
 
 ### 当前真实状态
 
-- 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载、19/19 必要文件与 6/6 权重分片完整性检查、架构/BF16/索引和官方 LFS SHA-256 校验。
-- 当前资源：GPU 关闭；低资源保留状态约 0.5 CPU / 2 GB RAM；GPU 实例启动后为 RTX 4090D 约 48 GB、约 20 CPU、约 90 GB RAM。
-- 当前未完成：最新文档提交与远程同步、10 文件最小数据传输、现有14B下载run的Profile A回传、本地复核、远程 Codex 接手、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item、30 Item。
+- 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载及完整性检查、冻结 5 Item 的 10 文件传输与 hash receipt、远程 Codex CLI、共享 `CODEX_HOME`、两个 ChatGPT 账号手动切换、进程级 Mihomo、远程 bootstrap Smoke 和跨账号同一 Thread 续接 Smoke。
+- 当前资源：GPU 关闭；低资源保留状态约 0.5 CPU / 2 GB RAM；GPU 实例启动后为 RTX 4090D 约 48 GB、约 20 CPU、约 90 GB RAM。远程 Codex 控制面不需要 GPU。
+- 当前未完成：本机 Codex 桌面端官方 SSH Connection UI 只读 Smoke、现有14B下载run的Profile A回传与本地复核、Token/预算冻结、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item、30 Item。
 - 当前 Semantic V2：总 Item 29,451；train 20,637、dev 2,897、test 5,917；Paper 3,921；Paper 使用 Item 19,605；external leftover 9,846；quarantine 506。
 
 ### 质量与成本原则
@@ -51,7 +51,11 @@ output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
 
 ### 远程 Codex 控制面
 
-远程 Codex 只是服务器开发与操作工具，不属于论文算法，不进入实验成本，也不需要 GPU。它必须先读取 `AGENTS.md` 和 `remote-codex-handoff.md`，默认只在仓库和批准的数据盘路径内工作。网络先测试直连，只有直连失败才允许配置仅监听 `127.0.0.1` 的进程级 Mihomo；代理不得注入正式推理进程或改变延迟测量。
+远程 Codex 只是服务器开发与操作工具，不属于论文算法，不进入实验成本，也不需要 GPU。方案 A 的唯一主入口是“本机 Codex 桌面端 → 官方 SSH Remote → AutoDL 远程 Codex App Server → `/root/autodl-tmp/a2a-dygrade/repo`”；VS Code Remote-SSH 仅作为文件、终端和 Git diff 编辑器，Codex IDE Extension 不作为阻塞项。
+
+远程 Codex 必须先读取 `AGENTS.md` 和 `remote-codex-handoff.md`，默认只在仓库和批准的数据盘路径内工作。直连不可用后，已配置仅监听 `127.0.0.1` 的 Mihomo，并由 Codex 包装器只注入 Codex 子进程；代理不得注入正式推理进程或改变延迟测量。
+
+两个 ChatGPT 账号共享同一个 `CODEX_HOME`，但各自的 `auth.json` 存放于权限受限的独立保险库。账号切换只允许由用户显式执行 `codex-account switch <profile>`；禁止自动检测额度、自动轮询账号或自动重发。切换只替换活动认证文件，不改变会话数据库，因此账号 B 可以通过 `codex exec resume` 续接账号 A 创建的同一 Thread。
 
 ### 分阶段产物
 
