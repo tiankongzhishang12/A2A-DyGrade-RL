@@ -401,7 +401,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 
 **目标**：在不改变 Dataset Semantic V2、无 Anchor、Gold、split、Paper、Prompt、Schema 和正式质量协议的前提下，将已冻结的自托管 Pilot 安全迁移到 AutoDL 数据盘；先完成远程 Codex 接手和 14B BF16 单模型 Smoke，再按门禁决定 3B/8B、真实 5 Item 和 30 Item。评分质量和严重错分风险始终优先，任何资源下降不得补偿质量失败。
 
-**当前状态快照（2026-08-18）**：AutoDL服务器已克隆到新实例 `autodl-container-74204da04f-3f9e1fa7`；本机 `autodl-a2a` SSH别名已切换并恢复密钥认证。200GB数据盘、Git clean tree、14B BF16 19/19冻结文件SHA-256、冻结5 Item数据、关键历史run、远程Codex CLI、进程级Mihomo和双账号共享状态均重新验证通过；GPU当前关闭。克隆后Desktop首次只读hostname核对、14B下载产物Profile A完整回传、Token/预算复核、推理环境、14B真实推理、3B/8B、真实5 Item和30 Item尚未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
+**当前状态快照（2026-08-18）**：AutoDL服务器已克隆到新实例 `autodl-container-74204da04f-3f9e1fa7`；本机 `autodl-a2a` SSH别名已切换并恢复密钥认证。200GB数据盘、Git clean tree、14B BF16 19/19冻结文件SHA-256、冻结5 Item数据、关键历史run、远程Codex CLI、进程级Mihomo、双账号共享状态和克隆后Desktop只读重连均验证通过；GPU当前关闭。14B下载产物Profile A完整回传、Token/预算复核、推理环境、14B真实推理、3B/8B、真实5 Item和30 Item尚未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
 
 **独立验收**：远程 Codex 能在 GPU 关闭时读取并遵守 `AGENTS.md` 与交接文件，远程仓库保持干净且提交/hash 可审计；14B 服务在批准的 `max_model_len=32768` 下完成身份、结构化输出、文本/视觉 Token、图片、显存和延迟 Smoke；只有 3B/8B/14B 均通过相同契约后才能执行固定 5 Item 共 15 条 canonical 调用；5 Item validator PASS 且用户批准后才允许执行 30 Item。任何质量门失败、语义退化、身份不符、usage 缺失、OOM 或费用越界都必须 fail closed。
 
@@ -421,7 +421,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 - [X] T115 [US2] 使用 `run_id=remote_codex_bootstrap_20260815T050326Z` 保存远程接手 Smoke，完成治理文件读取、Git/磁盘/GPU/后台任务报告、只读 `git status` 和批准路径最小写入/撤销；该 bootstrap 的 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
 - [ ] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed
 - [X] T115B [US2] 已在本机 Codex 桌面端注册 `remote-ssh-discovered:autodl-a2a` 并从该 Connection 对 `/root/autodl-tmp/a2a-dygrade/repo` 完成只读 Smoke；远程会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 的 `originator=Codex Desktop`，验证 cwd/hostname、分支、`HEAD=fc61512f2786c6e9cf011e4721f339a387381443`、clean tree、`account-a`、GPU关闭、治理原则理解和锁定阶段均正确，证据写入 `official_ssh_remote_20260817T091500Z`
-- [X] T115C [US2] 将现有AutoDL项目克隆到新实例并继续复用 `autodl-a2a` Host别名；恢复SSH密钥认证，验证hostname、200GB数据盘、`HEAD=7406f4b39264a0331a7e58fb7ad452aaa0638977` clean tree、14B 19/19冻结文件SHA-256、关键历史run共享文件hash、Codex 0.147.0、双账号700/600权限、Mihomo 204和GPU/推理调用为0，证据写入 `server_clone_migration_20260818T082805Z`；克隆后首次Desktop任务必须先只读核对新hostname
+- [X] T115C [US2] 将现有AutoDL项目克隆到新实例并继续复用 `autodl-a2a` Host别名；恢复SSH密钥认证，验证hostname、200GB数据盘、`HEAD=7406f4b39264a0331a7e58fb7ad452aaa0638977` clean tree、14B 19/19冻结文件SHA-256、关键历史run共享文件hash、Codex 0.147.0、双账号700/600权限、Mihomo 204和GPU/推理调用为0；克隆后Desktop只读重连进一步确认hostname、项目路径、分支、`HEAD=acdb8ce75947f830834e3d83464fdc12819d5ecd`和clean tree，证据写入 `server_clone_migration_20260818T082805Z`
 
 ### S2：14B推理环境与真实Smoke（需要GPU）
 

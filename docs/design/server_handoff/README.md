@@ -9,7 +9,7 @@
 - 14B BF16模型19/19个冻结文件已按原下载manifest重新计算SHA-256并全部匹配；三份关键历史run和五份治理文档的共享文件hash均一致。
 - 冻结5 Item的10个最小文件已传输并通过hash receipt；Dev/Test和非checkpoint train传输数均为0。
 - 远程Codex CLI、共享`CODEX_HOME`、两个ChatGPT账号手动切换、进程级Mihomo、App Server和跨账号同一Thread续接能力均保留；账号保险库与认证文件权限仍为700/600。
-- 原本机Codex官方SSH Connection UI和只读Smoke证据继续作为方案A历史验收；SSH别名已切换到新实例，下一次从Desktop创建远程任务时必须先核对新hostname。
+- 原本机Codex官方SSH Connection UI和只读Smoke证据继续作为方案A历史验收；克隆后Desktop只读重连也已通过，确认hostname、项目路径、分支、HEAD和clean tree均指向新实例。
 - 14B下载Profile A回传、本地复核、推理环境和真实14B Smoke尚未执行；GPU当前关闭，新实例GPU/Driver/CUDA须在T116恢复GPU后重新核验。
 - 3B/8B、真实5 Item、30 Item和Formal均未解锁。
 - 评分质量优先，资源不可补偿质量失败；论文主成本只使用Official API-Equivalent Token Cost，服务器租金不进入实验指标。

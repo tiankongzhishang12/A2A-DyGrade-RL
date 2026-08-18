@@ -170,7 +170,7 @@ Mihomo：127.0.0.1:7890，allow-lan=false，仅注入Codex子进程
 后端状态：PASS
 克隆实例SSH别名与密钥认证：PASS；autodl-a2a已指向新实例
 桌面Connection UI历史验收：PASS
-克隆后Desktop首次重连门：必须核对hostname=autodl-container-74204da04f-3f9e1fa7后再执行任何写操作
+克隆后Desktop只读重连：PASS；hostname、项目路径、分支、HEAD和clean tree均已确认指向新实例
 历史桌面会话：01a01069-d270-7f81-9c98-c0199e79a6e6（originator=Codex Desktop；source=vscode为内部枚举，不代表VS Code Remote-SSH）
 ```
 
@@ -284,7 +284,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 4. 未修改文件、未安装依赖、未下载/启动模型、未产生论文实验调用；
 5. 原方案A验收证据位于 `official_ssh_remote_20260817T091500Z`；
 6. 2026-08-18完成克隆迁移：新数据盘200GB、Git clean tree、14B 19/19文件SHA-256、关键历史run、Codex双账号与Mihomo均已通过，证据位于 `server_clone_migration_20260818T082805Z`；
-7. 本机 `autodl-a2a` 已保留原别名并切换到新实例；下一次Desktop任务必须先只读核对新hostname。
+7. 本机 `autodl-a2a` 已保留原别名并切换到新实例；克隆后Desktop只读重连已确认新hostname、项目路径、分支、`HEAD=acdb8ce75947f830834e3d83464fdc12819d5ecd`和clean tree。
 
 ### 阶段 B：完成下载产物回传与预算复核（不需要GPU）
 
@@ -327,7 +327,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | 方案A文档与验收链收敛 | PASS | `core_handoff_contract_commit=f1d08f2...`、`desktop_smoke_status_commit=6141f1f...`、`final_document_convergence_commit=3050fd7...` 已推送并 fast-forward 同步到AutoDL；最终metadata HEAD以Git同步证据为准 |
 | 5 Item最小数据传输 | PASS | `remote_data_transfer_20260815T044106Z` receipt：10/10、hash mismatch=0、Dev/Test=0 |
 | 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
-| 本机Codex官方SSH Remote UI | PASS / 克隆后首次重连需只读核对hostname | `remote-ssh-discovered:autodl-a2a` 已注册；历史桌面会话完成只读Smoke，SSH别名现已指向新实例 |
+| 本机Codex官方SSH Remote UI | PASS | `remote-ssh-discovered:autodl-a2a` 已注册；克隆后只读重连确认新hostname、项目路径、分支、HEAD和clean tree均正确 |
 | 克隆实例迁移 | PASS | `server_clone_migration_20260818T082805Z`：200GB数据盘、Git clean tree、14B 19/19 SHA-256、历史run、Codex双账号和Mihomo均通过；GPU调用0 |
 | 14B下载与完整性校验 | 远程PASS / 回传LOCKED | 克隆后19/19文件hash再次PASS；T112A仍需按Profile A回传完整下载run并完成本地复核 |
 | 14B真实推理Smoke | LOCKED / 未执行 | Token预算、环境、身份、usage、图片、显存和延迟通过并回传本地复核 |

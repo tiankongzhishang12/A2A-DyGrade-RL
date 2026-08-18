@@ -22,6 +22,8 @@ server:
   platform: AutoDL
   hostname: autodl-container-74204da04f-3f9e1fa7
   ssh_host_alias: autodl-a2a
+  desktop_readonly_reconnect_status: PASS
+  desktop_reconnect_verified_head: acdb8ce75947f830834e3d83464fdc12819d5ecd
   clone_migration_run_id: server_clone_migration_20260818T082805Z
   clone_source_git_head: 7406f4b39264a0331a7e58fb7ad452aaa0638977
   clone_git_status: clean
