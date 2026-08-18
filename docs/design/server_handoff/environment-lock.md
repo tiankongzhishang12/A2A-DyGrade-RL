@@ -1,16 +1,15 @@
 # 服务器环境冻结要求
 
-> **状态快照**：2026-08-17。硬件与14B权重、远程Codex控制面和10文件传输已经核验；推理软件环境尚未安装和冻结。所有路径必须位于AutoDL数据盘。
+> **状态快照**：2026-08-18。项目已克隆到新AutoDL实例；数据盘、Git、14B权重、远程Codex控制面和关键历史run已经重新核验。推理软件环境尚未安装和冻结。所有路径必须位于AutoDL数据盘。
 
-## 已核验硬件
+## 已核验硬件与克隆状态
 
-- GPU：NVIDIA GeForce RTX 4090D，显存约48GB。
-- GPU数量：1张；Cheap/Mid/Strong顺序加载，不为同时常驻三模型额外租卡。
-- CPU：GPU实例启动后约20核。
-- 内存：GPU实例启动后约90GB。
-- 低资源保留状态：约0.5核CPU、2GB内存、无GPU。
-- 当前GPU状态：关闭。
-- 磁盘：模型、虚拟环境、缓存、prepared data和run产物全部放数据盘；任何阶段开始前重新检查容量并保留至少20%余量。
+- 当前实例hostname：`autodl-container-74204da04f-3f9e1fa7`；克隆迁移run为 `server_clone_migration_20260818T082805Z`。
+- 批准的GPU配置仍为NVIDIA GeForce RTX 4090D约48GB、1张；Cheap/Mid/Strong顺序加载，不为同时常驻三模型额外租卡。
+- 新实例当前处于GPU关闭状态，`nvidia-smi -L`返回`No devices found.`；GPU型号、Driver、CUDA、约20核CPU和约90GB内存必须在T116恢复GPU后重新核验，不得仅凭克隆来源冒充运行时验证。
+- 低资源保留状态已重新核验为约0.5核CPU、2GB内存、无GPU。
+- 数据盘已重新核验为200GB，已用约27GB、剩余约174GB、使用率14%，满足至少20%空闲余量要求。
+- 模型、虚拟环境、缓存、prepared data和run产物继续全部放在数据盘；任何阶段开始前重新检查容量并保留至少20%余量。
 
 ## 已冻结远程控制面
 
@@ -19,6 +18,7 @@
 - 可选VS Code Server目录预留为 `/root/autodl-tmp/a2a-dygrade/runtime/vscode/`；它不是方案A的阻塞项。
 - 两个ChatGPT账号共享会话状态但使用独立认证文件；只允许用户显式手动切换。
 - 当前GPU关闭；远程Codex操作性模型调用不计入论文实验成本。
+- 克隆后14B目录19/19个冻结文件SHA-256、三份关键历史run共享文件和五份治理文档hash均已重新验证；不得把克隆成功解释为14B真实推理Smoke通过。
 
 ## 待冻结软件版本
 

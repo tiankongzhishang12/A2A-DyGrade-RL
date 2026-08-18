@@ -2,13 +2,15 @@
 
 > **当前入口**：远程服务器、模型、GPU、任务与审批状态以 `remote-codex-handoff.md` 为准。原P8“未租服务器、未下载模型”描述只属于2026-08-13之前的本地准备历史边界。
 
-## 当前状态（2026-08-17）
+## 当前状态（2026-08-18）
 
-- V1.6本地准备P1–P8、AutoDL服务器、远程Git仓库、14B BF16下载与完整性检查均已完成。
+- AutoDL已克隆到新实例 `autodl-container-74204da04f-3f9e1fa7`；本机SSH别名继续使用 `autodl-a2a`，密钥认证、Git和数据盘迁移核验均通过。
+- 新数据盘为200GB，已用约27GB、剩余约174GB；项目路径继续保持 `/root/autodl-tmp/a2a-dygrade`，无需修改实验路径配置。
+- 14B BF16模型19/19个冻结文件已按原下载manifest重新计算SHA-256并全部匹配；三份关键历史run和五份治理文档的共享文件hash均一致。
 - 冻结5 Item的10个最小文件已传输并通过hash receipt；Dev/Test和非checkpoint train传输数均为0。
-- 远程Codex CLI、共享`CODEX_HOME`、两个ChatGPT账号手动切换、进程级Mihomo、App Server和跨账号同一Thread续接Smoke已完成。
-- 本机Codex官方SSH Connection UI及其只读Smoke已通过；远程会话`01a01069-d270-7f81-9c98-c0199e79a6e6`由`Codex Desktop`创建并验证远程路径、Git、账号、GPU和治理原则。
-- 14B下载Profile A回传、本地复核、推理环境和真实14B Smoke尚未执行；GPU当前关闭。
+- 远程Codex CLI、共享`CODEX_HOME`、两个ChatGPT账号手动切换、进程级Mihomo、App Server和跨账号同一Thread续接能力均保留；账号保险库与认证文件权限仍为700/600。
+- 原本机Codex官方SSH Connection UI和只读Smoke证据继续作为方案A历史验收；SSH别名已切换到新实例，下一次从Desktop创建远程任务时必须先核对新hostname。
+- 14B下载Profile A回传、本地复核、推理环境和真实14B Smoke尚未执行；GPU当前关闭，新实例GPU/Driver/CUDA须在T116恢复GPU后重新核验。
 - 3B/8B、真实5 Item、30 Item和Formal均未解锁。
 - 评分质量优先，资源不可补偿质量失败；论文主成本只使用Official API-Equivalent Token Cost，服务器租金不进入实验指标。
 

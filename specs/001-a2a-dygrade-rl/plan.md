@@ -14,8 +14,9 @@
 ### 当前真实状态
 
 - 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载及完整性检查、冻结 5 Item 的 10 文件传输与 hash receipt、远程 Codex CLI、共享 `CODEX_HOME`、两个 ChatGPT 账号手动切换、进程级 Mihomo、远程 bootstrap Smoke、跨账号同一 Thread 续接 Smoke，以及本机 Codex 官方 SSH Connection UI 与桌面只读 Smoke。
-- 当前资源：GPU 关闭；低资源保留状态约 0.5 CPU / 2 GB RAM；GPU 实例启动后为 RTX 4090D 约 48 GB、约 20 CPU、约 90 GB RAM。远程 Codex 控制面不需要 GPU。
-- 当前未完成：现有14B下载run的Profile A回传与本地复核、Token/预算复核、推理环境、14B 真实 Smoke、3B/8B、真实 5 Item、30 Item。
+- 2026-08-18已将项目克隆到新实例 `autodl-container-74204da04f-3f9e1fa7`：本机SSH别名 `autodl-a2a` 已切换并恢复密钥认证；200GB数据盘已用约27GB、剩余约174GB；Git clean tree、14B 19/19冻结文件SHA-256、关键历史run、Codex双账号和Mihomo均重新验证通过。
+- 当前资源：GPU关闭；低资源保留状态约0.5 CPU / 2GB RAM；批准GPU配置仍为RTX 4090D约48GB、约20 CPU、约90GB RAM，但新实例实际GPU/Driver/CUDA必须在T116恢复GPU后重新核验。远程Codex控制面不需要GPU。
+- 当前未完成：现有14B下载run的Profile A完整回传与本地复核、Token/预算复核、克隆后Desktop首次只读hostname核对、推理环境、14B真实Smoke、3B/8B、真实5 Item、30 Item。
 - 当前 Semantic V2：总 Item 29,451；train 20,637、dev 2,897、test 5,917；Paper 3,921；Paper 使用 Item 19,605；external leftover 9,846；quarantine 506。
 
 ### 质量与成本原则
@@ -56,6 +57,8 @@ output_root: /root/autodl-tmp/a2a-dygrade/repo/outputs/runs
 远程 Codex 必须先读取 `AGENTS.md` 和 `remote-codex-handoff.md`，默认只在仓库和批准的数据盘路径内工作。直连不可用后，已配置仅监听 `127.0.0.1` 的 Mihomo，并由 Codex 包装器只注入 Codex 子进程；代理不得注入正式推理进程或改变延迟测量。
 
 两个 ChatGPT 账号共享同一个 `CODEX_HOME`，但各自的 `auth.json` 存放于权限受限的独立保险库。账号切换只允许由用户显式执行 `codex-account switch <profile>`；禁止自动检测额度、自动轮询账号或自动重发。切换只替换活动认证文件，不改变会话数据库，因此账号 B 可以通过 `codex exec resume` 续接账号 A 创建的同一 Thread。
+
+克隆后继续复用 `autodl-a2a` Host别名，避免修改Codex Desktop Connection注册。新实例SSH密钥认证、远程路径、Git、模型hash和控制面均需先通过独立迁移run；第一次从Desktop重新连接时必须先只读核对新hostname，禁止直接沿用旧实例身份假设执行写操作。
 
 ### 分阶段产物
 

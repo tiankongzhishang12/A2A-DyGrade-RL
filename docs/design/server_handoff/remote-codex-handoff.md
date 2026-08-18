@@ -2,7 +2,7 @@
 
 > **用途**：本文件是远程 Codex 首次连接 AutoDL 服务器后的单一接手入口，负责说明当前研究目标、服务器状态、已完成内容、立即任务、实验门禁和禁止事项。
 >
-> **状态快照日期**：2026-08-17（Asia/Shanghai）
+> **状态快照日期**：2026-08-18（Asia/Shanghai）
 >
 > **优先级**：项目长期规则以仓库根目录 `AGENTS.md` 为最高事实来源；研究需求以 `specs/001-a2a-dygrade-rl/spec.md` 为准；本文件只负责当前远程执行状态。若本文件与旧服务器交接摘要中的阶段状态冲突，以时间戳更新且经过 Git 审核的文件为准，但任何文件都不得覆盖 `AGENTS.md` 的硬规则。
 
@@ -121,20 +121,22 @@ final_document_convergence_commit: 3050fd701ed6f66c65397d936a220be1ede8034d
 
 ## 6. 远程服务器状态快照
 
-截至 2026-08-17，已知状态如下：
+截至 2026-08-18，当前克隆实例状态如下：
 
 ```text
+当前hostname：autodl-container-74204da04f-3f9e1fa7
 远程项目：/root/autodl-tmp/a2a-dygrade/repo
 数据盘根：/root/autodl-tmp/a2a-dygrade
 Git分支：codex/selfhosted-ministral3-pilot
-最近核验内容HEAD：3050fd701ed6f66c65397d936a220be1ede8034d
-最终三端metadata HEAD：以 `outputs/runs/official_ssh_remote_20260817T091500Z/logs/git-sync-final.txt` 为准
+克隆时源HEAD：7406f4b39264a0331a7e58fb7ad452aaa0638977
+迁移文档提交后的最终HEAD：以 outputs/runs/server_clone_migration_20260818T082805Z/logs/git-final-sync.txt 为准
 工作树：干净
 GPU：当前关闭；nvidia-smi 返回 No devices found
 低资源保留状态：约 0.5 CPU / 2 GB RAM / 无 GPU
-GPU实例启动后：RTX 4090D 约 48 GB / 约 20 CPU / 约 90 GB RAM
-数据盘：最近核验约已用 27 GB、剩余 264 GB；执行前必须重新检查
-当前后台任务：无模型下载、校验、推理或残留 Codex App Server 进程；Mihomo 仅作为远程 Codex 网络辅助运行
+批准GPU配置：RTX 4090D 约 48 GB / 约 20 CPU / 约 90 GB RAM；T116恢复GPU后必须重新核验
+数据盘：200 GB，已用约 27 GB、剩余约 174 GB、使用率14%
+当前后台任务：无模型下载或推理任务；推理进程数0；Mihomo仅作为远程Codex网络辅助运行
+克隆迁移run：server_clone_migration_20260818T082805Z
 ```
 
 低资源保留状态可以用于 SSH、文档整理、轻量 Git 操作和远程 Codex 基础配置，但不用于 vLLM、模型加载、大规模测试或并行数据处理。Codex 远程控制本身不需要 GPU；只有本地模型加载和推理需要恢复 GPU。
@@ -166,9 +168,10 @@ SSH Host别名：autodl-a2a
 账号配置：account-a、account-b；最终活动账号 account-a
 Mihomo：127.0.0.1:7890，allow-lan=false，仅注入Codex子进程
 后端状态：PASS
-桌面Connection UI：PASS
-桌面只读Smoke：PASS
-桌面会话：01a01069-d270-7f81-9c98-c0199e79a6e6（originator=Codex Desktop；source=vscode为内部枚举，不代表VS Code Remote-SSH）
+克隆实例SSH别名与密钥认证：PASS；autodl-a2a已指向新实例
+桌面Connection UI历史验收：PASS
+克隆后Desktop首次重连门：必须核对hostname=autodl-container-74204da04f-3f9e1fa7后再执行任何写操作
+历史桌面会话：01a01069-d270-7f81-9c98-c0199e79a6e6（originator=Codex Desktop；source=vscode为内部枚举，不代表VS Code Remote-SSH）
 ```
 
 远程后端验收 run 为：
@@ -279,7 +282,9 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 2. 桌面会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 从该 Connection 进入 `/root/autodl-tmp/a2a-dygrade/repo`；
 3. cwd、hostname、Git branch/HEAD/status、`account-a`、GPU关闭、治理文件理解和锁定阶段均验证通过；
 4. 未修改文件、未安装依赖、未下载/启动模型、未产生论文实验调用；
-5. 验收证据位于 `official_ssh_remote_20260817T091500Z`。
+5. 原方案A验收证据位于 `official_ssh_remote_20260817T091500Z`；
+6. 2026-08-18完成克隆迁移：新数据盘200GB、Git clean tree、14B 19/19文件SHA-256、关键历史run、Codex双账号与Mihomo均已通过，证据位于 `server_clone_migration_20260818T082805Z`；
+7. 本机 `autodl-a2a` 已保留原别名并切换到新实例；下一次Desktop任务必须先只读核对新hostname。
 
 ### 阶段 B：完成下载产物回传与预算复核（不需要GPU）
 
@@ -322,8 +327,9 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | 方案A文档与验收链收敛 | PASS | `core_handoff_contract_commit=f1d08f2...`、`desktop_smoke_status_commit=6141f1f...`、`final_document_convergence_commit=3050fd7...` 已推送并 fast-forward 同步到AutoDL；最终metadata HEAD以Git同步证据为准 |
 | 5 Item最小数据传输 | PASS | `remote_data_transfer_20260815T044106Z` receipt：10/10、hash mismatch=0、Dev/Test=0 |
 | 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
-| 本机Codex官方SSH Remote UI | PASS | `remote-ssh-discovered:autodl-a2a` 已注册；桌面会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 完成只读 Smoke |
-| 14B下载与完整性校验 | 远程PASS / 回传LOCKED | T112已完成远程校验；T112A Profile A回传和本地复核通过后闭环 |
+| 本机Codex官方SSH Remote UI | PASS / 克隆后首次重连需只读核对hostname | `remote-ssh-discovered:autodl-a2a` 已注册；历史桌面会话完成只读Smoke，SSH别名现已指向新实例 |
+| 克隆实例迁移 | PASS | `server_clone_migration_20260818T082805Z`：200GB数据盘、Git clean tree、14B 19/19 SHA-256、历史run、Codex双账号和Mihomo均通过；GPU调用0 |
+| 14B下载与完整性校验 | 远程PASS / 回传LOCKED | 克隆后19/19文件hash再次PASS；T112A仍需按Profile A回传完整下载run并完成本地复核 |
 | 14B真实推理Smoke | LOCKED / 未执行 | Token预算、环境、身份、usage、图片、显存和延迟通过并回传本地复核 |
 | 3B/8B下载与Smoke | LOCKED | 14B远程/本地Smoke通过且用户批准 |
 | 真实5 Item Checkpoint | LOCKED | 三档模型远程/本地Smoke、环境锁、数据hash和Token预算门全部通过 |

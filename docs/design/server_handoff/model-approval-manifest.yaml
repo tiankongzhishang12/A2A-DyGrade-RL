@@ -12,23 +12,37 @@ official_context_tokens: 262144
 approved_runtime_max_model_len: 32768
 common_prompt: prompts/selfhosted_v1/scorer.txt
 common_response_schema: a2a_dygrade_agent_output_v2
-verified_at: "2026-08-17"
+verified_at: "2026-08-18"
 official_sources:
   - https://docs.mistral.ai/models/ministral-3-3b-25-12
   - https://docs.mistral.ai/models/ministral-3-8b-25-12
   - https://docs.mistral.ai/models/ministral-3-14b-25-12
 server:
-  status: provisioned
+  status: provisioned_and_clone_verified
   platform: AutoDL
+  hostname: autodl-container-74204da04f-3f9e1fa7
+  ssh_host_alias: autodl-a2a
+  clone_migration_run_id: server_clone_migration_20260818T082805Z
+  clone_source_git_head: 7406f4b39264a0331a7e58fb7ad452aaa0638977
+  clone_git_status: clean
+  data_disk_total_gib: 200
+  data_disk_used_gib_approx: 27
+  data_disk_available_gib_approx: 174
+  data_disk_use_percent: 14
   gpu_model: NVIDIA GeForce RTX 4090D
   gpu_memory_gib_approx: 48
   gpu_count: 1
+  gpu_runtime_reverification_status: pending_T116_gpu_resume
   cpu_cores_approx_when_running: 20
   ram_gib_approx_when_running: 90
+  low_resource_cpu_cores_approx: 0.5
+  low_resource_ram_gib_approx: 2
   gpu_power_state: off
   repo_root: /root/autodl-tmp/a2a-dygrade/repo
   model_root: /root/autodl-tmp/a2a-dygrade/models/ministral3
   runtime_root: /root/autodl-tmp/a2a-dygrade/runtime
+  strong_model_clone_hash_status: PASS
+  strong_model_clone_verified_files: 19
 approvals:
   server_provisioning: approved_and_completed
   strong_model_download: approved_and_completed
