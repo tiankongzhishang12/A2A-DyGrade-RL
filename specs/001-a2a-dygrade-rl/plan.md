@@ -1,7 +1,7 @@
 # 实现计划：面向模拟试卷级自动阅卷的质量约束多智能体动态路由实验流水线
 
 **分支**：`001-a2a-dygrade-rl`
-**日期**：2026-08-17
+**日期**：2026-08-19
 **规格**：[spec.md](./spec.md)
 **依据**：`docs/design/研究定义与实验约束同步方案.md` V1.4、`docs/design/A2A-DyGrade-RL_实验设计方案.md` 2.3、`AGENTS.md` 1.5.0
 
@@ -16,7 +16,7 @@
 - 已完成：AutoDL 实例创建与硬件核验、完整 Git 仓库迁移、14B BF16 固定 revision 下载及完整性检查、冻结 5 Item 的 10 文件传输与 hash receipt、远程 Codex CLI、共享 `CODEX_HOME`、两个 ChatGPT 账号手动切换、进程级 Mihomo、远程 bootstrap Smoke、跨账号同一 Thread 续接 Smoke，以及本机 Codex 官方 SSH Connection UI 与桌面只读 Smoke。
 - 2026-08-18已将项目克隆到新实例 `autodl-container-74204da04f-3f9e1fa7`：本机SSH别名 `autodl-a2a` 已切换并恢复密钥认证；200GB数据盘已用约27GB、剩余约174GB；Git clean tree、14B 19/19冻结文件SHA-256、关键历史run、Codex双账号和Mihomo均重新验证通过。
 - 当前资源：GPU关闭；低资源保留状态约0.5 CPU / 2GB RAM；批准GPU配置仍为RTX 4090D约48GB、约20 CPU、约90GB RAM，但新实例实际GPU/Driver/CUDA必须在T116恢复GPU后重新核验。远程Codex控制面不需要GPU。
-- 当前未完成：现有14B下载run的Profile A完整回传与本地复核、Token/预算复核、推理环境、14B真实Smoke、3B/8B、真实5 Item、30 Item；克隆后Desktop只读hostname核对已经通过。
+- 阶段 B 已完成：14B下载run的Profile A远端19/19模型文件与17/17回传文件校验PASS，本地receipt的hash、size、overlap、敏感与禁回传检查均PASS；T115A Token/预算冻结PASS。当前未完成：推理环境、14B真实Smoke、3B/8B、真实5 Item、30 Item；GPU保持关闭。
 - 当前 Semantic V2：总 Item 29,451；train 20,637、dev 2,897、test 5,917；Paper 3,921；Paper 使用 Item 19,605；external leftover 9,846；quarantine 506。
 
 ### 质量与成本原则
@@ -1276,9 +1276,9 @@ CLI 只做流程编排，业务逻辑留在 `src/`。具体任务见 `tasks.md`�
 依据 `tasks.md` Phase 10，当前执行顺序固定为：
 
 1. 方案A Official SSH Remote控制面已经完成，继续保持GPU关闭；
-2. 执行T112A：将现有14B Download Profile A的脱敏manifest、日志和报告回传本地并完成hash复核，不回传模型权重；
-3. 与T112A并行执行T115A：复核Token价格、canonical/attempt/并发/上下文/输出等调用预算，服务器租金不进入论文指标；
-4. 仅在T112A与T115A均PASS且用户再次批准后恢复GPU；
+2. T112A已完成：14B模型19/19文件及Profile A的17/17 payload hash均PASS，本地`artifact-return-receipt.json`状态PASS，模型权重未回传；
+3. T115A已完成：Token价格、canonical/attempt/并发/超时/上下文/输出等调用预算已冻结，`server_hourly_price_usd=null`，证据run为`selfhosted_14b_smoke_20260819T022654Z`；
+4. 阶段B已PASS；仅在本轮7份文档提交/同步、远程Git状态重新冻结且用户再次批准后恢复GPU；
 5. 执行14B环境锁、文本和多模态Smoke，并按Smoke Profile B回传本地复核；
 6. 14B远程/本地Smoke PASS且用户批准后再下载和验证3B/8B；
 7. 三模型Smoke PASS后执行真实5 Item，回传并在本地重算validator；

@@ -12,7 +12,7 @@ official_context_tokens: 262144
 approved_runtime_max_model_len: 32768
 common_prompt: prompts/selfhosted_v1/scorer.txt
 common_response_schema: a2a_dygrade_agent_output_v2
-verified_at: "2026-08-18"
+verified_at: "2026-08-19"
 official_sources:
   - https://docs.mistral.ai/models/ministral-3-3b-25-12
   - https://docs.mistral.ai/models/ministral-3-8b-25-12
@@ -39,23 +39,39 @@ server:
   ram_gib_approx_when_running: 90
   low_resource_cpu_cores_approx: 0.5
   low_resource_ram_gib_approx: 2
-  gpu_power_state: off
+  gpu_power_state: "off"
   repo_root: /root/autodl-tmp/a2a-dygrade/repo
   model_root: /root/autodl-tmp/a2a-dygrade/models/ministral3
   runtime_root: /root/autodl-tmp/a2a-dygrade/runtime
   strong_model_clone_hash_status: PASS
   strong_model_clone_verified_files: 19
+artifact_returns:
+  strong_model_download_profile_a:
+    task: T112A
+    run_id: selfhosted_14b_download_20260813T082720Z
+    execution_status: completed
+    local_validation_status: PASS
+    manifest_payload_file_count: 17
+    returned_file_count: 18
+    manifest_sha256: 88ac200b812d0cacad60ccf707b503a63235815ae9ed8c481cd90f23654a1a84
+    model_weights_returned: false
+    sensitive_pattern_finding_count: 0
 approvals:
   server_provisioning: approved_and_completed
   strong_model_download: approved_and_completed
+  token_budget_freeze:
+    scope_approval: approved
+    task: T115A
+    execution_status: completed
+    evidence_run_id: selfhosted_14b_smoke_20260819T022654Z
   strong_environment_install:
     scope_approval: approved
-    prerequisite_gate: blocked_by_T112A_T115A
+    prerequisite_gate: prerequisites_passed_waiting_gpu_resume_approval
     gpu_resume_approval: required
     execution_status: locked
   strong_real_smoke:
     scope_approval: approved
-    prerequisite_gate: blocked_by_T112A_T115A
+    prerequisite_gate: prerequisites_passed_waiting_gpu_resume_approval
     gpu_resume_approval: required
     execution_status: locked
   cheap_mid_model_download: pending_user_approval

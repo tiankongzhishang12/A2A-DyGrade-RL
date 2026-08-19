@@ -1,6 +1,8 @@
 # Token价格与实验调用预算
 
 > 本文件只定义论文实验的Token等价成本和调用硬门。AutoDL服务器租金、GPU空闲、模型下载、模型加载、环境安装和远程Codex操作不属于论文实验成本。
+>
+> **T115A冻结状态（2026-08-19）**：3B/8B/14B官方价格已复核为每百万输入/输出Token分别USD 0.10/0.10、0.15/0.15、0.20/0.20；`selfhosted_14b_smoke_20260819T022654Z`已冻结三阶段调用预算并通过配置预检，GPU调用、真实模型调用与依赖安装均为0。
 
 ## 论文主成本：Official API-Equivalent Token Cost
 
@@ -124,9 +126,20 @@ server_hourly_price_usd: null
 执行真实run前必须逐项核对本文件与resolved config：
 
 - `max_total_calls`、`max_cost_usd`、`timeout_seconds`；
-- `max_model_len`、`max_output_tokens`、`temperature`、`enable_thinking`；
+- `max_model_len`、`max_output_tokens`、`temperature`、`enable_thinking`；当前实现映射为`agent.generation_parameters.max_tokens=max_output_tokens`；
+- `provider.max_attempts=max_attempts_per_logical_call`；
 - `server_hourly_price_usd=null`；
 - Agent集合、canonical调用数和并发；
 - 价格manifest路径与SHA-256。
 
 任一字段不一致时不得启动模型调用，并在run的 `reports/budget-gate.json` 中记录FAIL。
+
+T115A冻结证据：
+
+```text
+outputs/runs/selfhosted_14b_smoke_20260819T022654Z/configs/call-budgets.yaml
+outputs/runs/selfhosted_14b_smoke_20260819T022654Z/configs/resolved-config.yaml
+outputs/runs/selfhosted_14b_smoke_20260819T022654Z/configs/pricing_manifest.yaml
+outputs/runs/selfhosted_14b_smoke_20260819T022654Z/reports/budget-gate.json
+outputs/runs/selfhosted_14b_smoke_20260819T022654Z/reports/stage-b-readiness.md
+```

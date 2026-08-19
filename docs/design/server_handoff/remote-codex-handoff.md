@@ -2,7 +2,7 @@
 
 > **用途**：本文件是远程 Codex 首次连接 AutoDL 服务器后的单一接手入口，负责说明当前研究目标、服务器状态、已完成内容、立即任务、实验门禁和禁止事项。
 >
-> **状态快照日期**：2026-08-18（Asia/Shanghai）
+> **状态快照日期**：2026-08-19（Asia/Shanghai）
 >
 > **优先级**：项目长期规则以仓库根目录 `AGENTS.md` 为最高事实来源；研究需求以 `specs/001-a2a-dygrade-rl/spec.md` 为准；本文件只负责当前远程执行状态。若本文件与旧服务器交接摘要中的阶段状态冲突，以时间戳更新且经过 Git 审核的文件为准，但任何文件都不得覆盖 `AGENTS.md` 的硬规则。
 
@@ -223,7 +223,7 @@ codex-account verify
 /root/autodl-tmp/a2a-dygrade/repo/outputs/runs/selfhosted_14b_download_20260813T082720Z/configs/model-14b-download-manifest.json
 ```
 
-该下载run尚未按 `artifact-return-manifest.md` Profile A回传本地；T112A必须在14B Smoke前生成全文件hash、下载验证摘要和本地receipt。模型权重本身不得回传。
+2026-08-19已完成该下载run的Profile A：14B模型目录19/19文件与冻结hash匹配，远端清单覆盖17/17个脱敏payload文件；本地`artifact-return-receipt.json`状态PASS，manifest SHA-256为`88ac200b812d0cacad60ccf707b503a63235815ae9ed8c481cd90f23654a1a84`，hash/size/overlap/敏感/禁回传异常均为0，模型权重未回传。源`artifact-sha256.json`中的`local_receipt_status=PENDING`是回传前不可改写快照，最终状态以外置receipt为准。
 
 当前批准的推理上下文上限为：
 
@@ -248,6 +248,8 @@ approved_runtime_max_model_len: 32768
 - 远程 Codex CLI、共享 `CODEX_HOME`、两个账号保险库、手动切换器和进程级 Mihomo 已配置；
 - 远程 bootstrap Smoke、App Server Smoke、跨账号同一 Thread 续接 Smoke、本机官方 SSH Connection 注册与桌面只读 Smoke 已通过；
 - GPU保持关闭，当前没有执行真实14B推理、真实5 Item或30 Item。
+- T115A已通过`selfhosted_14b_smoke_20260819T022654Z`冻结官方价格、三阶段调用预算及运行参数，预算门PASS且真实模型调用为0。
+- T112A已完成Profile A本地回传复核，receipt状态PASS；阶段B全部门禁已通过。
 
 权威本地准备 run 包括：
 
@@ -259,8 +261,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 ## 9. 当前尚未完成内容
 
-- 现有14B下载run尚未执行T112A Profile A回传和本地hash复核；
-- Token价格与真实调用预算尚未完成 T115A 冻结；
+- T112A与T115A均已完成；当前仅待本轮7份文档提交/同步、远程Git重新冻结和用户批准恢复GPU；
 - 远程推理虚拟环境及 vLLM/依赖尚未形成最终环境锁；
 - 14B BF16 尚未启动服务；
 - 14B 文本身份、结构化输出、usage 和延迟 Smoke 尚未执行；
@@ -286,12 +287,12 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 6. 2026-08-18完成克隆迁移：新数据盘200GB、Git clean tree、14B 19/19文件SHA-256、关键历史run、Codex双账号与Mihomo均已通过，证据位于 `server_clone_migration_20260818T082805Z`；
 7. 本机 `autodl-a2a` 已保留原别名并切换到新实例；克隆后Desktop只读重连已确认新hostname、项目路径、分支、`HEAD=acdb8ce75947f830834e3d83464fdc12819d5ecd`和clean tree。
 
-### 阶段 B：完成下载产物回传与预算复核（不需要GPU）
+### 阶段 B：下载产物回传与预算复核（已完成，不需要GPU）
 
-1. T112A将现有14B下载run按Profile A回传本地并完成hash复核，不回传模型权重；
-2. T115A冻结 Token 价格、canonical 调用数、attempt、并发、超时、上下文和输出上限；
+1. T112A脱敏下载run已回传本地D盘，hash复核与receipt PASS，未回传模型权重；
+2. T115A已冻结 Token 价格、canonical 调用数、attempt、并发、超时、上下文和输出上限，预算门PASS；
 3. `server_hourly_price_usd=null`，服务器租金不进入论文指标；
-4. 复核 10 文件 receipt、远程 Git clean tree 和全部前置 gate 后，才允许申请恢复 GPU。
+4. 阶段B全部门禁PASS；提交/同步本轮7份文档并重新冻结远程Git后，申请用户批准恢复GPU。
 
 ### 日常使用、历史和改动查看
 
@@ -310,7 +311,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 
 ### 阶段 C：Token预算与14B真实Smoke（需要GPU）
 
-1. T115A冻结Token价格、调用数、attempt、并发、超时、上下文和输出上限；
+1. 确认T115A预算门与T112A本地receipt保持PASS；
 2. `server_hourly_price_usd=null`，服务器租金不进入论文指标；
 3. 恢复GPU并核验RTX 4090D、Driver、CUDA、CPU和RAM；
 4. 在数据盘创建独立环境并冻结PyTorch、vLLM、Transformers和Processor版本；
@@ -329,7 +330,7 @@ outputs/runs/selfhosted_local_readiness_20260812_001/
 | 远程Codex后端 | PASS | CLI、共享会话双账号、Mihomo、App Server和bootstrap均通过；论文实验调用/成本与GPU调用为0 |
 | 本机Codex官方SSH Remote UI | PASS | `remote-ssh-discovered:autodl-a2a` 已注册；克隆后只读重连确认新hostname、项目路径、分支、HEAD和clean tree均正确 |
 | 克隆实例迁移 | PASS | `server_clone_migration_20260818T082805Z`：200GB数据盘、Git clean tree、14B 19/19 SHA-256、历史run、Codex双账号和Mihomo均通过；GPU调用0 |
-| 14B下载与完整性校验 | 远程PASS / 回传LOCKED | 克隆后19/19文件hash再次PASS；T112A仍需按Profile A回传完整下载run并完成本地复核 |
+| 14B下载与完整性校验 | PASS | 19/19模型文件与17/17 payload文件hash均PASS；T112A本地receipt PASS，模型权重未回传 |
 | 14B真实推理Smoke | LOCKED / 未执行 | Token预算、环境、身份、usage、图片、显存和延迟通过并回传本地复核 |
 | 3B/8B下载与Smoke | LOCKED | 14B远程/本地Smoke通过且用户批准 |
 | 真实5 Item Checkpoint | LOCKED | 三档模型远程/本地Smoke、环境锁、数据hash和Token预算门全部通过 |

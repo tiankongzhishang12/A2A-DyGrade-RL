@@ -2,7 +2,7 @@
 
 **输入**：来自 `specs/001-a2a-dygrade-rl/` 的设计文档
 
-**同步版本**：V1.8 方案 A Official SSH Remote 控制面已完整验收；V1.7 AutoDL 交接与 V1.6 本地准备继续有效。当前下一步为14B下载产物回传与Token/预算复核，并继承 V1.4 Quality Champion 质量保护与正式质量协议
+**同步版本**：V1.8 方案 A Official SSH Remote 控制面已完整验收；V1.7 AutoDL 交接与 V1.6 本地准备继续有效。T112A Profile A本地回传复核与T115A预算冻结均已完成，阶段B已PASS；当前下一步为提交/同步7份收敛文档并等待用户批准恢复GPU，继续继承 V1.4 Quality Champion 质量保护与正式质量协议
 
 **前置文档**：plan.md、spec.md、research.md、data-model.md、contracts/、quickstart.md
 
@@ -401,7 +401,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 
 **目标**：在不改变 Dataset Semantic V2、无 Anchor、Gold、split、Paper、Prompt、Schema 和正式质量协议的前提下，将已冻结的自托管 Pilot 安全迁移到 AutoDL 数据盘；先完成远程 Codex 接手和 14B BF16 单模型 Smoke，再按门禁决定 3B/8B、真实 5 Item 和 30 Item。评分质量和严重错分风险始终优先，任何资源下降不得补偿质量失败。
 
-**当前状态快照（2026-08-18）**：AutoDL服务器已克隆到新实例 `autodl-container-74204da04f-3f9e1fa7`；本机 `autodl-a2a` SSH别名已切换并恢复密钥认证。200GB数据盘、Git clean tree、14B BF16 19/19冻结文件SHA-256、冻结5 Item数据、关键历史run、远程Codex CLI、进程级Mihomo、双账号共享状态和克隆后Desktop只读重连均验证通过；GPU当前关闭。14B下载产物Profile A完整回传、Token/预算复核、推理环境、14B真实推理、3B/8B、真实5 Item和30 Item尚未完成。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
+**当前状态快照（2026-08-19）**：AutoDL服务器保持在实例 `autodl-container-74204da04f-3f9e1fa7`，GPU关闭。14B BF16 19/19冻结模型文件与Profile A 17/17 payload文件SHA-256全部匹配；本地`artifact-return-receipt.json`为PASS，hash/size/overlap/敏感/禁回传异常均为0，模型权重未回传；T115A预算门PASS。阶段B已完成，GPU调用、真实模型调用和依赖安装均为0；推理环境、14B真实推理、3B/8B、真实5 Item和30 Item尚未执行。详细状态以 `docs/design/server_handoff/remote-codex-handoff.md` 为当前接手入口。
 
 **独立验收**：远程 Codex 能在 GPU 关闭时读取并遵守 `AGENTS.md` 与交接文件，远程仓库保持干净且提交/hash 可审计；14B 服务在批准的 `max_model_len=32768` 下完成身份、结构化输出、文本/视觉 Token、图片、显存和延迟 Smoke；只有 3B/8B/14B 均通过相同契约后才能执行固定 5 Item 共 15 条 canonical 调用；5 Item validator PASS 且用户批准后才允许执行 30 Item。任何质量门失败、语义退化、身份不符、usage 缺失、OOM 或费用越界都必须 fail closed。
 
@@ -410,7 +410,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 - [X] T110 [US2] 在 AutoDL 实例核验 RTX 4090D 约48GB、约20核CPU、约90GB内存和数据盘容量，并将 GPU 关闭后的低资源状态与数据盘路径记录到 `docs/design/server_handoff/remote-codex-handoff.md`
 - [X] T111 [US2] 将完整 Git 仓库迁移到 `/root/autodl-tmp/a2a-dygrade/repo`，核验冻结执行提交 `44f3e5fcf825794d4516455b9c7dd3fd3c5bc796`、远程 origin 和干净工作树，并在 `docs/design/server_handoff/remote-codex-handoff.md` 保留代码冻结说明
 - [X] T112 [US2] 将 `mistralai/Ministral-3-14B-Instruct-2512-BF16` revision `3cea74c1ebaf5ce5f5a2553de470e2ceab825142` 下载到 `/root/autodl-tmp/a2a-dygrade/models/ministral3/14b-bf16`，完成19/19必要文件、6/6权重分片、架构/BF16/索引和官方LFS SHA-256校验，并保存 `/root/autodl-tmp/a2a-dygrade/repo/outputs/runs/selfhosted_14b_download_20260813T082720Z/configs/model-14b-download-manifest.json`
-- [ ] T112A [US2] 按 `docs/design/server_handoff/artifact-return-manifest.md` Profile A 为现有14B下载run补齐全文件artifact SHA-256和下载验证摘要，回传本地相同 `run_id` 目录并生成 `artifact-return-receipt.json`；只回传manifest、日志和报告，不回传模型权重、缓存、虚拟环境或凭据，远程/本地hash不一致时禁止14B Smoke
+- [X] T112A [US2] 按 `docs/design/server_handoff/artifact-return-manifest.md` Profile A 为现有14B下载run补齐全文件artifact SHA-256和下载验证摘要，回传本地相同 `run_id` 目录并生成 `artifact-return-receipt.json`；只回传manifest、日志和报告，不回传模型权重、缓存、虚拟环境或凭据，远程/本地hash不一致时禁止14B Smoke。2026-08-19远端模型清单19/19与payload清单17/17匹配；本地receipt状态PASS，manifest SHA-256为`88ac200b812d0cacad60ccf707b503a63235815ae9ed8c481cd90f23654a1a84`，hash/size/overlap/敏感/禁回传异常均为0，模型权重未回传
 
 ### S1：交接文档提交与远程Codex接管（不需要GPU）
 
@@ -419,7 +419,7 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 - [X] T114 [US2] 经用户批准，将远程 Codex CLI、共享 `CODEX_HOME`、账号保险库和必要日志放在 `/root/autodl-tmp/a2a-dygrade/runtime/codex/`，为可选 VS Code Server 保留 `/root/autodl-tmp/a2a-dygrade/runtime/vscode/`；在直连不可用后配置仅监听 `127.0.0.1` 的 Codex 进程级 Mihomo，未将认证Token、SSH凭据或代理订阅写入仓库
 - [X] T114A [US2] 配置两个独立 ChatGPT 账号保险库与单一共享 `CODEX_HOME`，实现只替换活动 `auth.json` 的显式手动切换；完成 `account-a → account-b → account-a` 验证和跨账号同一 Thread 续接 Smoke，确认凭据不同、持久会话状态不变，最终活动账号恢复为 `account-a`
 - [X] T115 [US2] 使用 `run_id=remote_codex_bootstrap_20260815T050326Z` 保存远程接手 Smoke，完成治理文件读取、Git/磁盘/GPU/后台任务报告、只读 `git status` 和批准路径最小写入/撤销；该 bootstrap 的 GPU 调用数、真实模型调用数和论文实验 Token 成本均为 0
-- [ ] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed
+- [X] T115A [US2] 更新 `docs/design/server_handoff/pricing-and-budget.md` 和真实 run 配置，冻结 Token 价格、canonical 调用数、最大 attempt、并发、超时、`max_model_len`、输出上限、`temperature` 与 Thinking 模式；`server_hourly_price_usd` 保持 `null`，服务器租金不进入论文指标，任一调用或 Token 硬门超限时 fail closed。2026-08-19官方价格复核与`selfhosted_14b_smoke_20260819T022654Z`配置预检均PASS，GPU/真实模型调用为0
 - [X] T115B [US2] 已在本机 Codex 桌面端注册 `remote-ssh-discovered:autodl-a2a` 并从该 Connection 对 `/root/autodl-tmp/a2a-dygrade/repo` 完成只读 Smoke；远程会话 `01a01069-d270-7f81-9c98-c0199e79a6e6` 的 `originator=Codex Desktop`，验证 cwd/hostname、分支、`HEAD=fc61512f2786c6e9cf011e4721f339a387381443`、clean tree、`account-a`、GPU关闭、治理原则理解和锁定阶段均正确，证据写入 `official_ssh_remote_20260817T091500Z`
 - [X] T115C [US2] 将现有AutoDL项目克隆到新实例并继续复用 `autodl-a2a` Host别名；恢复SSH密钥认证，验证hostname、200GB数据盘、`HEAD=7406f4b39264a0331a7e58fb7ad452aaa0638977` clean tree、14B 19/19冻结文件SHA-256、关键历史run共享文件hash、Codex 0.147.0、双账号700/600权限、Mihomo 204和GPU/推理调用为0；克隆后Desktop只读重连进一步确认hostname、项目路径、分支、`HEAD=acdb8ce75947f830834e3d83464fdc12819d5ecd`和clean tree，证据写入 `server_clone_migration_20260818T082805Z`
 
@@ -456,8 +456,8 @@ T092 → T093-T096 → T097-T101 → T102-T104 → T105 → T106-T107 → T108 �
 ```text
 已完成服务器基线：T110 → T111 → T112
 已完成方案A与克隆迁移：T113 + T113A + T114 + T114A + T115 + T115B + T115C
-当前无GPU下一步：T112A（14B下载产物回传）、T115A（预算复核）
-T112A + T115A → T116 → T117 → T118 → T119 → T119A
+阶段B已完成：T112A PASS + T115A PASS
+7份文档提交/同步 + 用户批准恢复GPU → T116 → T117 → T118 → T119 → T119A
 T119A PASS + 用户批准 → T120 → T120A → T121 → T121A
 T121A PASS → T122 → T123 → T123A
 T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
@@ -465,7 +465,7 @@ T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
 
 ### Phase 10并行机会
 
-- T113、T113A、T115B和T115C已完成。T112A与T115A均不需要GPU，可以并行；T116必须等待两者PASS并获得恢复GPU批准。
+- T112A、T113、T113A、T115A、T115B和T115C已完成。T116必须等待本轮7份文档提交/同步、远程Git状态重新冻结并获得恢复GPU批准。
 - T116中环境版本记录和磁盘/显存监控脚本准备可并行；14B服务启动必须等待环境锁完成。
 - T117的文本Smoke与T118的图片资产预检查可以并行准备，但真实模型调用应顺序执行并复用同一冻结服务配置。
 - 3B与8B下载在磁盘、带宽和费用批准后可并行；各自Profile A回传与本地复核可并行，但T120A必须全部PASS后才能顺序加载单卡真实Smoke，避免同时常驻造成不公平资源条件。
@@ -474,5 +474,5 @@ T123A PASS + 用户批准 → T123B → T124 → T125 → T125A
 ### Phase 10当前用户审阅门禁
 
 - 方案A控制面与克隆迁移任务T113、T113A、T114、T114A、T115、T115B和T115C已经按实际证据完成，不得被旧审批摘要回退为未完成。
-- 当前只允许在不打开GPU的条件下完成T112A下载产物回传和T115A预算复核；两者均PASS并再次获得恢复GPU批准前，T116及后续真实推理任务保持 `[ ]`。
+- T112A与T115A均已PASS，阶段B完成；本轮7份文档提交/同步且再次获得恢复GPU批准前，T116及后续真实推理任务保持 `[ ]`。
 - 14B已下载不等于14B真实Smoke通过；Fake PASS、控制面PASS或数据传输PASS均不得解锁3B/8B、真实5 Item、30 Item或Formal。
